@@ -108,14 +108,13 @@ class BytestringSplitter(object):
     def __radd__(self, other):
         return other + bytes(self)
 
-
-class RepeatingBytestringSplitter(BytestringSplitter):
-
-    def __call__(self, splittable):
+    def repeat(self, splittable):
         remainder = True
         messages = []
         while remainder:
-            message, remainder = super().__call__(splittable, return_remainder=True)
+            *message, remainder = self(splittable, return_remainder=True)
+            if len(message) == 1:
+                message = message[0]
             messages.append(message)
             splittable = remainder
         return messages
