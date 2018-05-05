@@ -26,7 +26,8 @@ class BytestringSplitter(object):
                 # by the user and offer a better error message.
                 with suppress(IndexError):
                     if isinstance(message_types[counter + 1], int):
-                        raise TypeError("You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
+                        if type(message_type) not in (int, tuple):
+                            raise TypeError("You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
                 # OK, cool - break.
                 break
             else:
@@ -90,8 +91,13 @@ class BytestringSplitter(object):
             # If a message length has been passed manually, it will be the second item.
             message_length = message_type[1]
         except TypeError:
-            # If not, we expect it to be an attribute on the first item.
-            message_length = message_class._EXPECTED_LENGTH
+            if isinstance(message_class, int):
+                # If this is an int, we assume that it's the intended length, in bytes.
+                message_length = message_class
+                message_class = bytes
+            else:
+                # If not, we expect it to be an attribute on the first item.
+                message_length = message_class._EXPECTED_LENGTH
         except AttributeError:
             raise TypeError("No way to know the expected length.  Either pass it as the second member of a tuple or set _EXPECTED_LENGTH on the class you're passing.")
 
@@ -104,9 +110,6 @@ class BytestringSplitter(object):
 
     def __add__(self, splitter):
         return self.__class__(*self.message_types + splitter.message_types)
-
-    def __radd__(self, other):
-        return other + bytes(self)
 
     def repeat(self, splittable):
         remainder = True
