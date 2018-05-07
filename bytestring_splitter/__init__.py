@@ -1,30 +1,39 @@
 from contextlib import suppress
 import msgpack
 
-
 VARIABLE_HEADER_LENGTH = 4
+
 
 class BytestringSplitter(object):
 
-    def __init__(self, *message_types):
+    def __init__(self, *message_types_meta):
         """
         :param message_types:  A collection of types of messages to parse.
         """
-        self.message_types = message_types
-        self._is_variable_length = None
+        self._message_types_meta = message_types_meta
+
+        self.is_variable_length = None
         self._length = None
 
-        if not message_types:
+        self.message_types = []
+        self._populate_message_types()
+
+        if not message_types_meta:
             raise ValueError(
                 "Can't make a BytestringSplitter unless you specify what to split!")
 
-        # A quick sanity check here to make sure the message_types don't have a common formatting issue:
+        # A quick sanity check here to make sure the message_types don't have a common formatting issue.from
+        # See, you're allowed to pass a simple class and int to make a splitter - that's more-or-less syntactic sugar.
+        # You're not allowed to do things like BytestringSplitter((bytes, 3), 17) because what does that even mean?
         with suppress(IndexError):
-            if isinstance(message_types[1], int):
-                if type(message_types[0]) not in (int, tuple):
-                    raise TypeError("You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
+            first_message_is_not_int_or_tuple = type(message_types_meta[0]) not in (int, tuple)
+            second_message_is_int = isinstance(message_types_meta[1], int)
+
+            if first_message_is_not_int_or_tuple and second_message_is_int:
+                raise TypeError("You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
 
     def __call__(self, splittable, return_remainder=False, msgpack_remainder=False):
+
         if not self.is_variable_length:
             if not any((return_remainder, msgpack_remainder)) and len(self) != len(splittable):
                 raise ValueError(
@@ -35,13 +44,13 @@ class BytestringSplitter(object):
                 raise ValueError(
                     """Not enough bytes to constitute
                     message types {} - need {}, got {}""".format(self.message_types,
-                                                               len(self),
-                                                               len(splittable)))
+                                                                 len(self),
+                                                                 len(splittable)))
         cursor = 0
         message_objects = []
 
         for message_type in self.message_types:
-            message_class, message_length, kwargs = self._get_message_meta(message_type)
+            message_class, message_length, kwargs = self._parse_message_meta(message_type)
 
             if message_length is VariableLengthBytestring:
                 # If this message is of variable length, let's get the length
@@ -70,29 +79,33 @@ class BytestringSplitter(object):
         return message_objects
 
     def __len__(self):
-        if self._length is None:
-            self._determine_length()
         return self._length
 
-    def _determine_length(self):
+    def _populate_message_types(self):
         """
+        Examine the message types meta passed during __init__.
+
         Set self._length as the sum of all fixed-length messsages.
-        Also set self._is_variable_length in the event that we find
+
+        Set self.is_variable_length in the event that we find
         any variable-length message types.
+
+        Parse message meta to get proper classes and lengths for all messages.
         """
+
         total_length = 0
-        _is_variable_length = False
-        for m in self.message_types:
-            message_length = self._get_message_meta(m)[1]
+        for message_type in self._message_types_meta:
+            message_class, message_length, kwargs = self._parse_message_meta(message_type)
             if message_length == VariableLengthBytestring:
-                _is_variable_length = True
+                self.is_variable_length = True
             else:
                 total_length += message_length
+            self.message_types.append(self._parse_message_meta(message_type))
+
         self._length = total_length
-        self._is_variable_length = _is_variable_length
 
     @staticmethod
-    def _get_message_meta(message_type):
+    def _parse_message_meta(message_type):
         """
         Takes the message type and determines the class of the message, the length
         (or that it's variable-length), and the kwargs to pass to its constructor.
@@ -129,12 +142,6 @@ class BytestringSplitter(object):
 
     def __add__(self, splitter):
         return self.__class__(*self.message_types + splitter.message_types)
-
-    @property
-    def is_variable_length(self):
-        if self._is_variable_length == None:
-            self._determine_length()
-        return self._is_variable_length
 
     def repeat(self, splittable):
         """
