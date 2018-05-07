@@ -1,4 +1,4 @@
-from bytestring_splitter import BytestringSplitter
+from bytestring_splitter import BytestringSplitter, VariableLengthBytestring
 import pytest
 import msgpack
 
@@ -99,4 +99,20 @@ def test_repeating_splitter():
     for result in results:
         assert result == bytestring
 
+
+def test_variable_length():
+    class ThingThatWillBeDifferentLengths:
+        _EXPECTED_LENGTH = VariableLengthBytestring
+
+        def __init__(self, thing_as_bytes):
+            self.what_it_be = thing_as_bytes
+
+    thing_as_bytes = VariableLengthBytestring(b"Sometimes, it's short.")
+    another_thing_as_bytes = VariableLengthBytestring(b"Sometimes, it's really really really really long.")
+
+    both_things = thing_as_bytes + another_thing_as_bytes
+    splitter = BytestringSplitter(ThingThatWillBeDifferentLengths)
+    first_thing, second_thing = splitter.repeat(both_things)
+    assert thing_as_bytes == first_thing.what_it_be
+    assert another_thing_as_bytes == second_thing.what_it_be
 
