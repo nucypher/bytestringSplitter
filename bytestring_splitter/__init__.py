@@ -1,5 +1,4 @@
 from contextlib import suppress
-import msgpack
 
 VARIABLE_HEADER_LENGTH = 4
 
@@ -72,6 +71,10 @@ class BytestringSplitter(object):
         remainder = splittable[cursor:]
 
         if msgpack_remainder:
+            try:
+                import msgpack
+            except ImportError:
+                raise RuntimeError("You need to install msgpack to use msgpack_remainder.")
             message_objects.append(msgpack.loads(remainder))
         elif return_remainder:
             message_objects.append(remainder)
@@ -129,7 +132,7 @@ class BytestringSplitter(object):
                 message_class = bytes
             else:
                 # If not, we expect it to be an attribute on the first item.
-                message_length = message_class._EXPECTED_LENGTH
+                message_length = message_class.expected_bytes_length()
         except AttributeError:
             raise TypeError("No way to know the expected length.  Either pass it as the second member of a tuple or set _EXPECTED_LENGTH on the class you're passing.")
 
