@@ -146,6 +146,16 @@ class BytestringSplitter(object):
     def __add__(self, splitter):
         return self.__class__(*self.message_types + splitter.message_types)
 
+    def __mul__(self, times_to_add):
+        if not isinstance(times_to_add, int):
+            raise TypeError("You only multiply a BytestringSplitter by an int.")
+
+        new_splitter = self
+        for i in range(1, times_to_add):
+            new_splitter += self
+
+        return new_splitter
+
     def repeat(self, splittable):
         """
         Continue to split the splittable until we get to the end.
