@@ -1,6 +1,7 @@
-from bytestring_splitter import BytestringSplitter, VariableLengthBytestring
-import pytest
 import msgpack
+import pytest
+
+from bytestring_splitter import BytestringSplitter, VariableLengthBytestring
 
 
 def test_splitting_single_message():
@@ -24,16 +25,15 @@ def test_splitting_hello_world():
 
 def test_split_bytestring_into_strs():
     bytestring = b"hello world"
-    splitter = BytestringSplitter((str, 5, {"encoding":"utf-8"}),
-                                  (str, 1, {"encoding":"utf-8"}),
-                                  (str, 5, {"encoding":"utf-8"})
+    splitter = BytestringSplitter((str, 5, {"encoding": "utf-8"}),
+                                  (str, 1, {"encoding": "utf-8"}),
+                                  (str, 5, {"encoding": "utf-8"})
                                   )
     result = splitter(bytestring)
     assert result == ["hello", " ", "world"]
 
 
 def test_arbitrary_object():
-
     class Thing:
         def __init__(self, bytes_representaiton):
             self.whatever = bytes_representaiton
@@ -90,6 +90,14 @@ def test_add_splitters():
     assert result == [bytestring, bytestring]
 
 
+def test_multiply_splitters():
+    bytestring = b"8 bytes." * 5
+    splitter = BytestringSplitter(8)
+    splitter_40 = splitter * 5
+    result = splitter_40(bytestring)
+    assert bytes().join(result) == bytestring
+
+
 def test_repeating_splitter():
     times_to_repeat = 50
     bytestring = b"peace at dawn"
@@ -102,7 +110,7 @@ def test_repeating_splitter():
 
 def test_variable_length():
     class ThingThatWillBeDifferentLengths:
-        _EXPECTED_LENGTH = VariableLengthBytestring
+        expected_bytes_length = lambda: VariableLengthBytestring
 
         def __init__(self, thing_as_bytes):
             self.what_it_be = thing_as_bytes
