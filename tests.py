@@ -124,3 +124,43 @@ def test_variable_length():
     assert thing_as_bytes == first_thing.what_it_be
     assert another_thing_as_bytes == second_thing.what_it_be
 
+
+def test_passing_kwargs_along_with_bytes():
+    """
+    This time, we'll show splitting something that needs kwargs passed
+    into its from_bytes constructor, and which raises RuntimeError
+    if that thing isn't passed.
+    """
+
+    class ThingThatNeedsKwargs:
+        """
+        Here's the thing.
+        """
+
+        def __init__(self, thing_as_bytes):
+            self.what_it_be = thing_as_bytes
+
+        @classmethod
+        def from_bytes(cls, thing_as_bytes, necessary_kwarg=False):
+            if necessary_kwarg:
+                return cls(thing_as_bytes)
+            else:
+                raise RuntimeError
+
+    things_as_bytes = b"This is a thing that needs a kwarg.This is a thing that needs a kwarg."
+
+    bad_spliter = BytestringSplitter((ThingThatNeedsKwargs, 35))
+    bad_splitter_twice = bad_spliter * 2
+
+    with pytest.raises(RuntimeError):
+        bad_splitter_twice(things_as_bytes)
+
+    good_splitter = BytestringSplitter((ThingThatNeedsKwargs,
+                                        35,
+                                        {"necessary_kwarg": True})
+                                       )
+    good_splitter_twice = good_splitter * 2
+
+    result = good_splitter_twice(things_as_bytes)
+
+    assert result[0].what_it_be == things_as_bytes[:35]
