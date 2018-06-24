@@ -54,7 +54,7 @@ class BytestringSplitter(object):
             if message_length is VariableLengthBytestring:
                 # If this message is of variable length, let's get the length
                 # and advance the cursor past the bytes which represent the length.
-                message_length_as_bytes = splittable[cursor:VARIABLE_HEADER_LENGTH]
+                message_length_as_bytes = splittable[cursor:cursor+VARIABLE_HEADER_LENGTH]
                 message_length = int.from_bytes(message_length_as_bytes, "big")
                 cursor += VARIABLE_HEADER_LENGTH
 
