@@ -126,11 +126,11 @@ class BytestringSplitter(object):
             # as a flag that this is a variable-length message.
             message_length = message_type[1]
         except TypeError:
-            if isinstance(message_class, int):
-                # If this is an int, we assume that it's the intended length, in bytes.
-                message_length = message_class
+            try:
+                # If this can be casted as an int, we assume that it's the intended length, in bytes.
+                message_length = int(message_class)
                 message_class = bytes
-            else:
+            except (ValueError, TypeError):
                 # If not, we expect it to be an attribute on the first item.
                 message_length = message_class.expected_bytes_length()
         except AttributeError:
@@ -156,17 +156,24 @@ class BytestringSplitter(object):
 
         return new_splitter
 
-    def repeat(self, splittable):
+    def repeat(self, splittable, as_set=False):
         """
         Continue to split the splittable until we get to the end.
+
+        If as_set, return values as a set rather than a list.
         """
         remainder = True
-        messages = []
+        if as_set:
+            messages = set()
+            collector = messages.add
+        else:
+            messages = []
+            collector = messages.append
         while remainder:
             *message, remainder = self(splittable, return_remainder=True)
             if len(message) == 1:
                 message = message[0]
-            messages.append(message)
+            collector(message)
             splittable = remainder
         return messages
 
