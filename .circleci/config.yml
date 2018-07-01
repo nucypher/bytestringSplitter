@@ -1,0 +1,43 @@
+version: 2
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - python-35
+      - python-36
+
+base_test_steps: &base_test_steps
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "Pipfile.lock" }}
+          - v1-dependencies-
+      - run:
+          name: install dependencies
+          command: pipenv install --three --dev
+      - save_cache:
+          paths:
+            - "~/.local/share/virtualenvs/"
+          key: v1-dependencies-{{ checksum "Pipfile.lock" }}
+      - run:
+          name: Run Tests
+          command: pipenv run pytest tests.py --cov=. --cov-report=html  --junitxml=./reports/pytest/results.xml
+      - store_artifacts:
+          path: ./htmlcov
+      - store_test_results:
+          path: /reports/pytest
+
+jobs:
+  python-35:
+    docker:
+      - image: circleci/python:3.5
+    working_directory: ~/repo
+    <<: *base_test_steps
+
+  python-36:
+    docker:
+      - image: circleci/python:3.6
+    working_directory: ~/repo
+    <<: *base_test_steps
