@@ -209,3 +209,7 @@ class VariableLengthBytestring:
 
     def __eq__(self, other):
         return self.message_as_bytes == bytes(other)
+
+    @classmethod
+    def expected_bytes_length(cls):
+        return cls

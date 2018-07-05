@@ -108,13 +108,14 @@ def test_repeating_splitter():
         assert result == bytestring
 
 
-def test_variable_length():
-    class ThingThatWillBeDifferentLengths:
-        expected_bytes_length = lambda: VariableLengthBytestring
+class ThingThatWillBeDifferentLengths:
+    expected_bytes_length = lambda: VariableLengthBytestring
 
-        def __init__(self, thing_as_bytes):
-            self.what_it_be = thing_as_bytes
+    def __init__(self, thing_as_bytes):
+        self.what_it_be = thing_as_bytes
 
+
+def test_variable_length_in_first_positions():
     thing_as_bytes = VariableLengthBytestring(b"Sometimes, it's short.")
     another_thing_as_bytes = VariableLengthBytestring(b"Sometimes, it's really really really really long.")
 
@@ -123,6 +124,33 @@ def test_variable_length():
     first_thing, second_thing = splitter.repeat(both_things)
     assert thing_as_bytes == first_thing.what_it_be
     assert another_thing_as_bytes == second_thing.what_it_be
+
+
+def test_variable_length_after_fixed_length():
+    bytestring1 = b"This is a Thing."
+    bytestring2 = b"This is another Thing."
+
+    # One splitter, designed for the fixed length first and last messages,
+    # But any variable length middle message.
+    splitter = BytestringSplitter(16, VariableLengthBytestring, 22)
+
+    variable1 = VariableLengthBytestring(b"short.")
+    variable2 = VariableLengthBytestring(b"much much much much much longer.")
+
+    # Same beginning and end, but with different middles.
+    splittable1 = bytestring1 + variable1 + bytestring2
+    splittable2 = bytestring1 + variable2 + bytestring2
+
+    result1 = splitter(splittable1)
+    result2 = splitter(splittable2)
+
+    assert result1[0] == result2[0]  # The beginning is the same.
+    assert result1[2] == result2[2]  # The end is the same.
+
+
+    # And the two middles match their respective variable length bytestrings.
+    assert result1[1].message_as_bytes == variable1.message_as_bytes
+    assert result2[1].message_as_bytes == variable2.message_as_bytes
 
 
 def test_passing_kwargs_along_with_bytes():
