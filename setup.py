@@ -18,7 +18,7 @@ setup(name=ABOUT['__title__'],
       description=ABOUT['__summary__'],
       long_description=long_description,
 
-      extras_require={"testing": ["pytest", "pytest-cov"]},
+      extras_require={"testing": ["bumpversion", "pytest", "pytest-cov"]},
       install_requires=["msgpack-python"],
 
 
