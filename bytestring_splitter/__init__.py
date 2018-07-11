@@ -1,3 +1,7 @@
+from bytestring_splitter.__about__ import __author__, __summary__, __title__, __version__
+__all__ = ["__title__", "__summary__", "__version__", "__author__", ]
+
+
 from contextlib import suppress
 
 VARIABLE_HEADER_LENGTH = 4
