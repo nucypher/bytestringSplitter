@@ -1,5 +1,5 @@
 import os
-from distutils.core import setup
+from setuptools import setup
 
 BASE_DIR = os.path.dirname(__file__)
 
@@ -24,7 +24,6 @@ setup(name=ABOUT['__title__'],
 
       classifiers=[
           "Development Status :: 2 - Pre-Alpha",
-          "Intended Audience:: Developers",
           "Natural Language :: English",
           "Programming Language :: Python :: Implementation",
           "Programming Language :: Python :: 3 :: Only",

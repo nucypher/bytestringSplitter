@@ -12,6 +12,4 @@ __version__ = "0.1.0-alpha.0"
 
 __author__ = "NuCypher"
 
-# __license__ = "GNU General Public License, Version 3"
-
-# __copyright__ = ""
+__license__ = "Apache Software License v2.0"
