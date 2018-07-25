@@ -21,6 +21,7 @@ setup(name=ABOUT['__title__'],
       extras_require={"testing": ["bumpversion", "pytest", "pytest-cov"]},
       install_requires=["msgpack-python"],
 
+      packages=["bytestring_splitter"],
 
       classifiers=[
           "Development Status :: 2 - Pre-Alpha",
