@@ -40,7 +40,7 @@ class BytestringSplitter(object):
         if not self.is_variable_length:
             if not any((return_remainder, msgpack_remainder)) and len(self) != len(splittable):
                 raise ValueError(
-                    """"Wrong number of bytes to constitute message types {} - 
+                    """Wrong number of bytes to constitute message types {} - 
                     need {}, got {} \n Did you mean to return the remainder?""".format(
                         self.message_types, len(self), len(splittable)))
             if len(self) is not -1 and len(self) > len(splittable):
@@ -138,7 +138,9 @@ class BytestringSplitter(object):
                 # If not, we expect it to be an attribute on the first item.
                 message_length = message_class.expected_bytes_length()
         except AttributeError:
-            raise TypeError("No way to know the expected length.  Either pass it as the second member of a tuple or set _EXPECTED_LENGTH on the class you're passing.")
+            raise TypeError("""No way to know the expected length.  
+                Either pass it as the second member of a tuple or 
+                set _EXPECTED_LENGTH on the class you're passing.""")
 
         try:
             kwargs = message_type[2]
