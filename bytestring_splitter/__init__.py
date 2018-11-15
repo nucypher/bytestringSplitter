@@ -199,7 +199,7 @@ class VariableLengthBytestring:
             self.message_length_as_bytes = self.message_length.to_bytes(VARIABLE_HEADER_LENGTH, "big")
         except OverflowError:
             raise ValueError("Your message is too long.  The max length is {} bytes; yours is {}".format(
-                2 ** VARIABLE_HEADER_LENGTH -1,
+                256 ** VARIABLE_HEADER_LENGTH - 1,
                 self.message_length))
 
     def __bytes__(self):
