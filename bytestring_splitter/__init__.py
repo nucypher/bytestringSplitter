@@ -25,7 +25,7 @@ class BytestringSplitter(object):
             raise ValueError(
                 "Can't make a BytestringSplitter unless you specify what to split!")
 
-        # A quick sanity check here to make sure the message_types don't have a common formatting issue.from
+        # A quick sanity check here to make sure the message_types don't have a common formatting issue.
         # See, you're allowed to pass a simple class and int to make a splitter - that's more-or-less syntactic sugar.
         # You're not allowed to do things like BytestringSplitter((bytes, 3), 17) because what does that even mean?
         with suppress(IndexError):
@@ -219,3 +219,29 @@ class VariableLengthBytestring:
     @classmethod
     def expected_bytes_length(cls):
         return cls
+
+
+class BytestringSplittingFabricator(BytestringSplitter):
+
+    def __init__(self, mill=None, **kwargs):
+        self.mill = mill
+        BytestringSplitter.__init__(self, *kwargs.values())
+        self.argument_names = kwargs.keys()
+
+    def __call__(self,
+                 splittable,
+                 return_remainder=False,
+                 msgpack_remainder=False,
+                 mill=None):
+        mill = mill or self.mill
+
+        if mill is None:
+            raise TypeError("Can't fabricate without a mill.  You can either pass one when calling or pass one when init'ing.")
+
+        results = BytestringSplitter.__call__(self, splittable, return_remainder, msgpack_remainder)
+        kwargs = {}
+        for kwarg, value in zip(self.argument_names, results):
+            if isinstance(value, VariableLengthBytestring) or issubclass(value.__class__, VariableLengthBytestring):
+                value = value.message_as_bytes
+            kwargs[kwarg] = value
+        return mill(**kwargs)
