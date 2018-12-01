@@ -43,7 +43,8 @@ class BytestringSplitter(object):
             second_message_is_int = isinstance(message_parameters[1], int)
 
             if first_message_is_not_int_or_tuple and second_message_is_int:
-                raise TypeError("You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
+                raise TypeError(
+                    "You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
 
     def __call__(self, splittable, return_remainder=False, msgpack_remainder=False):
 
@@ -68,18 +69,44 @@ class BytestringSplitter(object):
             if message_length is VariableLengthBytestring:
                 # If this message is of variable length, let's get the length
                 # and advance the cursor past the bytes which represent the length.
-                message_length_as_bytes = splittable[cursor:cursor+VARIABLE_HEADER_LENGTH]
+                message_length_as_bytes = splittable[cursor:cursor + VARIABLE_HEADER_LENGTH]
                 message_length = int.from_bytes(message_length_as_bytes, "big")
                 cursor += VARIABLE_HEADER_LENGTH
 
+            if message_length > len(splittable):
+                error_message = "Can't split a message with more bytes than the original splittable.  {} claimed a length of {}"
+                if message_name:
+                    error_message = error_message.format(message_name, message_length)
+                else:
+                    error_message = error_message.format(message_class, message_length)
+                raise BytestringSplittingError(error_message)
+
             expected_end_of_object_bytes = cursor + message_length
             bytes_for_this_object = splittable[cursor:expected_end_of_object_bytes]
-            try:
-                message = message_class.from_bytes(bytes_for_this_object, **kwargs)
-            except AttributeError:
-                message = message_class(bytes_for_this_object, **kwargs)
 
-            message_objects.append(message)
+            try:
+                constructor = getattr(message_class, "from_bytes")
+            except AttributeError:
+                constructor = message_class
+
+            try:
+                message = constructor(bytes_for_this_object, **kwargs)
+            except Exception as e:
+                if message_name:
+                    error_message = "While constructing {}: ".format(message_name)
+                else:
+                    error_message = ""
+                error_message += "Unable to create a {} from {}, got: \n {}: {}".format(message_class, bytes_for_this_object, e, e.args)
+                raise BytestringSplittingError(error_message)
+
+            try:
+                if isinstance(message, VariableLengthBytestring) or issubclass(message.__class__, VariableLengthBytestring):
+                    value = message.message_as_bytes
+                else:
+                    value = message
+                processed_objects[message_name] = value
+            except TypeError:
+                processed_objects.append(message)
             cursor = expected_end_of_object_bytes
 
         remainder = splittable[cursor:]
