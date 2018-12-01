@@ -253,3 +253,9 @@ class BytestringSplittingFabricator(BytestringSplitter):
                 value = value.message_as_bytes
             kwargs[kwarg] = value
         return mill(**kwargs)
+
+    @staticmethod
+    def _parse_message_meta(message_item):
+        message_name, message_type = message_item
+        _, message_class, message_length, kwargs = BytestringSplitter._parse_message_meta(message_type)
+        return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
