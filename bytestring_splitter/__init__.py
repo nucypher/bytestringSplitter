@@ -225,6 +225,30 @@ class BytestringSplitter(object):
         return messages
 
 
+class BytestringKwargifier(BytestringSplitter):
+    processed_objects_container = dict
+
+    def __init__(self, receiver=None, **kwargs):
+        self.receiver = receiver
+        BytestringSplitter.__init__(self, *kwargs.items())
+
+    def __call__(self, splittable, receiver=None):
+        receiver = receiver or self.receiver
+
+        if receiver is None:
+            raise TypeError(
+                "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
+
+        results = BytestringSplitter.__call__(self, splittable, return_remainder=False, msgpack_remainder=False)
+        return receiver(**results)
+
+    @staticmethod
+    def _parse_message_meta(message_item):
+        message_name, message_type = message_item
+        _, message_class, message_length, kwargs = BytestringSplitter._parse_message_meta(message_type)
+        return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
+
+
 class VariableLengthBytestring:
 
     def __init__(self, message):
@@ -261,34 +285,3 @@ class VariableLengthBytestring:
     def expected_bytes_length(cls):
         return cls
 
-
-class BytestringSplittingFabricator(BytestringSplitter):
-
-    def __init__(self, mill=None, **kwargs):
-        self.mill = mill
-        BytestringSplitter.__init__(self, *kwargs.items())
-        self.argument_names = kwargs.keys()
-
-    def __call__(self,
-                 splittable,
-                 return_remainder=False,
-                 msgpack_remainder=False,
-                 mill=None):
-        mill = mill or self.mill
-
-        if mill is None:
-            raise TypeError("Can't fabricate without a mill.  You can either pass one when calling or pass one when init'ing.")
-
-        results = BytestringSplitter.__call__(self, splittable, return_remainder, msgpack_remainder)
-        kwargs = {}
-        for kwarg, value in zip(self.argument_names, results):
-            if isinstance(value, VariableLengthBytestring) or issubclass(value.__class__, VariableLengthBytestring):
-                value = value.message_as_bytes
-            kwargs[kwarg] = value
-        return mill(**kwargs)
-
-    @staticmethod
-    def _parse_message_meta(message_item):
-        message_name, message_type = message_item
-        _, message_class, message_length, kwargs = BytestringSplitter._parse_message_meta(message_type)
-        return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
