@@ -1,15 +1,19 @@
 from collections import namedtuple
 
 from bytestring_splitter.__about__ import __author__, __summary__, __title__, __version__
-__all__ = ["__title__", "__summary__", "__version__", "__author__", ]
 
+__all__ = ["__title__", "__summary__", "__version__", "__author__", ]
 
 from contextlib import suppress
 
 VARIABLE_HEADER_LENGTH = 4
 
 
-class BytestringSplitter(object):
+class BytestringSplittingError(TypeError):
+    """
+    Raised when the bytes don't go in the constructor.
+    """
+
 
     Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
 
