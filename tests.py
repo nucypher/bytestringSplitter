@@ -1,7 +1,8 @@
 import msgpack
 import pytest
 
-from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringSplittingFabricator
+from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringKwargifier, \
+    BytestringSplittingError
 
 
 def test_splitting_single_message():
@@ -179,7 +180,7 @@ def test_passing_kwargs_along_with_bytes():
     bad_spliter = BytestringSplitter((ThingThatNeedsKwargs, 35))
     bad_splitter_twice = bad_spliter * 2
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(BytestringSplittingError):
         bad_splitter_twice(things_as_bytes)
 
     good_splitter = BytestringSplitter((ThingThatNeedsKwargs,
@@ -201,7 +202,7 @@ def test_fabricate_object():
             self.thing2 = thing2
             self.thing3 = thing3
 
-    fab = BytestringSplittingFabricator(
+    fab = BytestringKwargifier(
         ThingToBeFabricated,
         thing1=VariableLengthBytestring,
         thing2=(bytes, 13),
