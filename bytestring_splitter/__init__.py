@@ -15,7 +15,9 @@ class BytestringSplittingError(TypeError):
     """
 
 
+class BytestringSplitter(object):
     Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
+    processed_objects_container = list
 
     def __init__(self, *message_parameters):
         """
@@ -58,7 +60,7 @@ class BytestringSplittingError(TypeError):
                                                                  len(self),
                                                                  len(splittable)))
         cursor = 0
-        processed_objects = []
+        processed_objects = self.processed_objects_container()
 
         for message_type in self.message_types:
             message_name, message_class, message_length, kwargs = message_type
