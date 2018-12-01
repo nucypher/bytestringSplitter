@@ -149,8 +149,8 @@ def test_variable_length_after_fixed_length():
     assert result1[2] == result2[2]  # The end is the same.
 
     # And the two middles match their respective variable length bytestrings.
-    assert result1[1].message_as_bytes == variable1.message_as_bytes
-    assert result2[1].message_as_bytes == variable2.message_as_bytes
+    assert result1[1] == variable1.message_as_bytes
+    assert result2[1] == variable2.message_as_bytes
 
 
 def test_passing_kwargs_along_with_bytes():
@@ -215,3 +215,10 @@ def test_fabricate_object():
     assert fabricated_object.thing1 == b"dingos"
     assert fabricated_object.thing2 == b"peace_at_dawn"
     assert fabricated_object.thing3 == 54453
+
+
+def test_bundle_and_split_variable_length():
+    items = [b'llamas', b'dingos', b'christmas-tree']
+    vbytes = bytes(VariableLengthBytestring.bundle(items))
+    items_again = VariableLengthBytestring.discharge(vbytes)
+    assert items == items_again

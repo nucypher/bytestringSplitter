@@ -99,14 +99,15 @@ class BytestringSplitter(object):
                 error_message += "Unable to create a {} from {}, got: \n {}: {}".format(message_class, bytes_for_this_object, e, e.args)
                 raise BytestringSplittingError(error_message)
 
+            if isinstance(message, VariableLengthBytestring) or issubclass(message.__class__, VariableLengthBytestring):
+                value = message.message_as_bytes
+            else:
+                value = message
+
             try:
-                if isinstance(message, VariableLengthBytestring) or issubclass(message.__class__, VariableLengthBytestring):
-                    value = message.message_as_bytes
-                else:
-                    value = message
                 processed_objects[message_name] = value
             except TypeError:
-                processed_objects.append(message)
+                processed_objects.append(value)
             cursor = expected_end_of_object_bytes
 
         remainder = splittable[cursor:]
@@ -285,3 +286,34 @@ class VariableLengthBytestring:
     def expected_bytes_length(cls):
         return cls
 
+    @classmethod
+    def bundle(cls, collection):
+        """
+        Casts each item in collection to bytes, makes a VariableLengthBytestring from each.
+        Then, casts the result to bytes and makes a VariableLengthBytestring from it.
+
+        Useful for semantically packing collections of individually useful objects without needing boilerplate all over the place.
+        """
+        vbytes = (VariableLengthBytestring(i) for i in collection)
+        concatenated_bytes = bytes().join(bytes(d) for d in vbytes)
+        vbytes_joined = VariableLengthBytestring(concatenated_bytes)
+        return vbytes_joined
+
+    @staticmethod
+    def discharge(bytestring):
+        """
+        Takes a bytestring representation of a VariableLengthBytestring, confirms that it is the correct length,
+        and returns the original bytes.
+        """
+        message_length_as_bytes = bytestring[0:0 + VARIABLE_HEADER_LENGTH]
+        message_length = int.from_bytes(message_length_as_bytes, "big")
+        message = bytestring[VARIABLE_HEADER_LENGTH:]
+        if not message_length == len(message):
+            raise BytestringSplittingError("This does not appear to be a VariableLengthBytestring, or is not the correct length.")
+
+        try:
+            items = BytestringSplitter(VariableLengthBytestring).repeat(message)
+        except BytestringSplittingError:
+            items = (message,)
+
+        return items
