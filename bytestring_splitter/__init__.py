@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 from bytestring_splitter.__about__ import __author__, __summary__, __title__, __version__
 __all__ = ["__title__", "__summary__", "__version__", "__author__", ]
 
@@ -9,7 +11,9 @@ VARIABLE_HEADER_LENGTH = 4
 
 class BytestringSplitter(object):
 
-    def __init__(self, *message_types_meta):
+    Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
+
+    def __init__(self, *message_parameters):
         """
         :param message_types:  A collection of types of messages to parse.
         """
