@@ -55,7 +55,7 @@ def test_arbitrary_object():
 def test_too_many_of_bytes_raises_error():
     bytestring = b"This is 16 bytes"
     splitter_15 = BytestringSplitter(8, 7)
-    with pytest.raises(ValueError):
+    with pytest.raises(BytestringSplittingError):
         splitter_15(bytestring)
 
 
@@ -70,7 +70,7 @@ def test_get_remainder_as_bytes():
 def test_not_enough_bytes_still_raises_error():
     bytestring = b"This is 16 bytes"
     splitter_17 = BytestringSplitter(10, 7)
-    with pytest.raises(ValueError):
+    with pytest.raises(BytestringSplittingError):
         splitter_17(bytestring, return_remainder=True)
 
 

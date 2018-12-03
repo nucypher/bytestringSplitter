@@ -50,12 +50,12 @@ class BytestringSplitter(object):
 
         if not self.is_variable_length:
             if not any((return_remainder, msgpack_remainder)) and len(self) != len(splittable):
-                raise ValueError(
+                raise BytestringSplittingError(
                     """Wrong number of bytes to constitute message types {} - 
                     need {}, got {} \n Did you mean to return the remainder?""".format(
                         self.message_types, len(self), len(splittable)))
             if len(self) is not -1 and len(self) > len(splittable):
-                raise ValueError(
+                raise BytestringSplittingError(
                     """Not enough bytes to constitute
                     message types {} - need {}, got {}""".format(self.message_types,
                                                                  len(self),
