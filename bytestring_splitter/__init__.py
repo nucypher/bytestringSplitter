@@ -9,7 +9,7 @@ from contextlib import suppress
 VARIABLE_HEADER_LENGTH = 4
 
 
-class BytestringSplittingError(TypeError):
+class BytestringSplittingError(Exception):
     """
     Raised when the bytes don't go in the constructor.
     """
@@ -21,7 +21,7 @@ class BytestringSplitter(object):
 
     def __init__(self, *message_parameters):
         """
-        :param message_types:  A collection of types of messages to parse.
+        :param message_parameters:  A collection of parameters specifying how to parse a bytestring into discrete messages.
         """
         if not message_parameters:
             raise ValueError(
@@ -44,12 +44,13 @@ class BytestringSplitter(object):
 
             if first_message_is_not_int_or_tuple and second_message_is_int:
                 raise TypeError(
-                    "You can't specify the length of the message as a direct argument to the constructor.  Instead, pass it as the second argument in a tuple (with the class as the first argument)")
+                    """You can't specify the length of the message as a direct argument to the constructor.
+                    Instead, pass it as the second argument in a tuple (with the class as the first argument)""")
 
     def __call__(self, splittable, return_remainder=False, msgpack_remainder=False):
 
         if not self.is_variable_length:
-            if not any((return_remainder, msgpack_remainder)) and len(self) != len(splittable):
+            if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
                 raise BytestringSplittingError(
                     """Wrong number of bytes to constitute message types {} - 
                     need {}, got {} \n Did you mean to return the remainder?""".format(
@@ -99,7 +100,8 @@ class BytestringSplitter(object):
                 error_message += "Unable to create a {} from {}, got: \n {}: {}".format(message_class, bytes_for_this_object, e, e.args)
                 raise BytestringSplittingError(error_message)
 
-            if isinstance(message, VariableLengthBytestring) or issubclass(message.__class__, VariableLengthBytestring):
+            message_is_variable_length = isinstance(message, VariableLengthBytestring) or issubclass(message.__class__, VariableLengthBytestring)
+            if message_is_variable_length:
                 value = message.message_as_bytes
             else:
                 value = message
@@ -300,12 +302,12 @@ class VariableLengthBytestring:
         return vbytes_joined
 
     @staticmethod
-    def discharge(bytestring):
+    def dispense(bytestring):
         """
         Takes a bytestring representation of a VariableLengthBytestring, confirms that it is the correct length,
         and returns the original bytes.
         """
-        message_length_as_bytes = bytestring[0:0 + VARIABLE_HEADER_LENGTH]
+        message_length_as_bytes = bytestring[:VARIABLE_HEADER_LENGTH]
         message_length = int.from_bytes(message_length_as_bytes, "big")
         message = bytestring[VARIABLE_HEADER_LENGTH:]
         if not message_length == len(message):

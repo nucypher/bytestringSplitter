@@ -220,5 +220,5 @@ def test_fabricate_object():
 def test_bundle_and_split_variable_length():
     items = [b'llamas', b'dingos', b'christmas-tree']
     vbytes = bytes(VariableLengthBytestring.bundle(items))
-    items_again = VariableLengthBytestring.discharge(vbytes)
+    items_again = VariableLengthBytestring.dispense(vbytes)
     assert items == items_again
