@@ -1,7 +1,8 @@
 import msgpack
 import pytest
 
-from bytestring_splitter import BytestringSplitter, VariableLengthBytestring
+from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringKwargifier, \
+    BytestringSplittingError
 
 
 def test_splitting_single_message():
@@ -54,7 +55,7 @@ def test_arbitrary_object():
 def test_too_many_of_bytes_raises_error():
     bytestring = b"This is 16 bytes"
     splitter_15 = BytestringSplitter(8, 7)
-    with pytest.raises(ValueError):
+    with pytest.raises(BytestringSplittingError):
         splitter_15(bytestring)
 
 
@@ -69,7 +70,7 @@ def test_get_remainder_as_bytes():
 def test_not_enough_bytes_still_raises_error():
     bytestring = b"This is 16 bytes"
     splitter_17 = BytestringSplitter(10, 7)
-    with pytest.raises(ValueError):
+    with pytest.raises(BytestringSplittingError):
         splitter_17(bytestring, return_remainder=True)
 
 
@@ -147,10 +148,9 @@ def test_variable_length_after_fixed_length():
     assert result1[0] == result2[0]  # The beginning is the same.
     assert result1[2] == result2[2]  # The end is the same.
 
-
     # And the two middles match their respective variable length bytestrings.
-    assert result1[1].message_as_bytes == variable1.message_as_bytes
-    assert result2[1].message_as_bytes == variable2.message_as_bytes
+    assert result1[1] == variable1.message_as_bytes
+    assert result2[1] == variable2.message_as_bytes
 
 
 def test_passing_kwargs_along_with_bytes():
@@ -180,7 +180,7 @@ def test_passing_kwargs_along_with_bytes():
     bad_spliter = BytestringSplitter((ThingThatNeedsKwargs, 35))
     bad_splitter_twice = bad_spliter * 2
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(BytestringSplittingError):
         bad_splitter_twice(things_as_bytes)
 
     good_splitter = BytestringSplitter((ThingThatNeedsKwargs,
@@ -192,3 +192,33 @@ def test_passing_kwargs_along_with_bytes():
     result = good_splitter_twice(things_as_bytes)
 
     assert result[0].what_it_be == things_as_bytes[:35]
+
+
+def test_fabricate_object():
+
+    class ThingToBeFabricated():
+        def __init__(self, thing1, thing2, thing3):
+            self.thing1 = thing1
+            self.thing2 = thing2
+            self.thing3 = thing3
+
+    fab = BytestringKwargifier(
+        ThingToBeFabricated,
+        thing1=VariableLengthBytestring,
+        thing2=(bytes, 13),
+        thing3=(int, 2, {"byteorder": "big"})
+    )
+
+    bytes_to_fab = VariableLengthBytestring(b"dingos") + b"peace_at_dawn" + int(54453).to_bytes(2, byteorder="big")
+
+    fabricated_object = fab(bytes_to_fab)
+    assert fabricated_object.thing1 == b"dingos"
+    assert fabricated_object.thing2 == b"peace_at_dawn"
+    assert fabricated_object.thing3 == 54453
+
+
+def test_bundle_and_split_variable_length():
+    items = [b'llamas', b'dingos', b'christmas-tree']
+    vbytes = bytes(VariableLengthBytestring.bundle(items))
+    items_again = VariableLengthBytestring.dispense(vbytes)
+    assert items == items_again
