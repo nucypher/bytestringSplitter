@@ -4,9 +4,11 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+setuptools = "*"
 msgpack-python = "*"
 
 [dev-packages]
 bumpversion = "*"
 pytest = "*"
-pytest-cov = "*"
+pytest-cov = "==2.5.1"
+python-coveralls = "*"
