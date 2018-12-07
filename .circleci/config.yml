@@ -23,6 +23,7 @@ workflows:
             branches:
               ignore: /.*/
 
+
 base_test_steps: &base_test_steps
     steps:
       - checkout
@@ -44,6 +45,11 @@ base_test_steps: &base_test_steps
           path: ./htmlcov
       - store_test_results:
           path: /reports/pytest
+      - run:
+          name: Upload Coverage Report
+          command: |
+            echo -e "COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN" >> .env
+            pipenv run coveralls
 
 jobs:
   python-36:
