@@ -4,7 +4,6 @@ workflows:
   version: 2
   test:
     jobs:
-      - python-35
       - python-36
 
 base_test_steps: &base_test_steps
@@ -30,12 +29,6 @@ base_test_steps: &base_test_steps
           path: /reports/pytest
 
 jobs:
-  python-35:
-    docker:
-      - image: circleci/python:3.5
-    working_directory: ~/repo
-    <<: *base_test_steps
-
   python-36:
     docker:
       - image: circleci/python:3.6
