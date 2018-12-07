@@ -28,15 +28,15 @@ base_test_steps: &base_test_steps
       - checkout
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "Pipfile.lock" }}
-          - v1-dependencies-
+          - v2-dependencies-{{ checksum "Pipfile.lock" }}
+          - v2-dependencies-
       - run:
           name: install dependencies
           command: pipenv install --three --dev
       - save_cache:
           paths:
             - "~/.local/share/virtualenvs/"
-          key: v1-dependencies-{{ checksum "Pipfile.lock" }}
+          key: v2-dependencies-{{ checksum "Pipfile.lock" }}
       - run:
           name: Run Tests
           command: pipenv run pytest tests.py --cov=. --cov-report=html  --junitxml=./reports/pytest/results.xml
