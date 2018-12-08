@@ -8,7 +8,7 @@ __title__ = "bytestring_splitter"
 
 __url__ = "https://github.com/nucypher/bytestringSplitter"
 
-__summary__ = 'Among the simplest imaginable ways to serialize: concatenate and split.',
+__summary__ = 'Among the simplest imaginable ways to serialize: concatenate and split.'
 
 __version__ = "1.0.0-alpha.4"
 
