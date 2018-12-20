@@ -51,16 +51,11 @@ class BytestringSplitter(object):
 
         if not self.is_variable_length:
             if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
-                raise BytestringSplittingError(
-                    """Wrong number of bytes to constitute message types {} - 
-                    need {}, got {} \n Did you mean to return the remainder?""".format(
-                        self.message_types, len(self), len(splittable)))
+                message = "Wrong number of bytes to constitute message types {} - need {}, got {} Did you mean to return the remainder?"
+                raise BytestringSplittingError(message.format(self.nice_message_types(), len(self), len(splittable)))
             if len(self) is not -1 and len(self) > len(splittable):
-                raise BytestringSplittingError(
-                    """Not enough bytes to constitute
-                    message types {} - need {}, got {}""".format(self.message_types,
-                                                                 len(self),
-                                                                 len(splittable)))
+                message = "Not enough bytes to constitute message types {} - need {}, got {}"
+                raise BytestringSplittingError(message.format(self.nice_message_types(), len(self), len(splittable)))
         cursor = 0
         processed_objects = self.processed_objects_container()
 
@@ -205,6 +200,9 @@ class BytestringSplitter(object):
             new_splitter += self
 
         return new_splitter
+
+    def nice_message_types(self):
+        return str().join("{}:{}, ".format(t[1].__name__, t[2]) for t in self.message_types)[:-2]
 
     def repeat(self, splittable, as_set=False):
         """
