@@ -178,18 +178,24 @@ class BytestringSplitter(object):
         except TypeError:
             message_class = message_type
 
+        seeker = 1
+
         try:
             # If a message length has been passed manually, it will be the second item.
             # It might be the class object VariableLengthBytestring, which we use
             # as a flag that this is a variable-length message.
-            message_length = message_type[1]
+            message_length = message_type[seeker]
+            if message_length == VariableLengthBytestring or int(message_type[seeker]):
+                seeker += 1
+            else:
+                raise TypeError("Can't use this as a length.")  # This will move us into the except block below.
         except TypeError:
             try:
                 # If this can be casted as an int, we assume that it's the intended length, in bytes.
                 message_length = int(message_class)
                 message_class = bytes
             except (ValueError, TypeError):
-                # If not, we expect it to be an attribute on the first item.
+                # If not, we expect it to be a method on the first item.
                 message_length = message_class.expected_bytes_length()
         except AttributeError:
             raise TypeError("""No way to know the expected length.  
@@ -197,7 +203,7 @@ class BytestringSplitter(object):
                 set _EXPECTED_LENGTH on the class you're passing.""")
 
         try:
-            kwargs = message_type[2]
+            kwargs = message_type[seeker]
         except (IndexError, TypeError):
             kwargs = {}
 
