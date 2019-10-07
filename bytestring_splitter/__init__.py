@@ -47,7 +47,15 @@ class BytestringSplitter(object):
                     """You can't specify the length of the message as a direct argument to the constructor.
                     Instead, pass it as the second argument in a tuple (with the class as the first argument)""")
 
-    def __call__(self, splittable, return_remainder=False, msgpack_remainder=False):
+    def __call__(self, splittable: bytes, return_remainder=False, msgpack_remainder=False, single=False):
+        """
+        :param splittable: the bytes to be split
+        :param return_remainder: Whether to return any bytes left after splitting.
+        :param msgpack_remainder: Whether to msgpack those bytes.
+        :param single: If this is True, assume that these bytes are a single object (rather than a collection) and return that list
+            or raise an error if there is a remainder.
+        :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
+        """
 
         if not self.is_variable_length:
             if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
@@ -101,11 +109,18 @@ class BytestringSplitter(object):
             else:
                 value = message
 
-            try:
-                processed_objects[message_name] = value
-            except TypeError:
-                processed_objects.append(value)
             cursor = expected_end_of_object_bytes
+
+            if single:
+                _remainder = len(splittable[cursor:])
+                if _remainder:
+                    raise ValueError(f"The bytes don't represent a single {message_class}; there are {_remainder} too many.")  # TODO
+                return value
+            else:
+                try:  # TODO: Make this more agnostic toward the collection type.
+                    processed_objects[message_name] = value
+                except TypeError:
+                    processed_objects.append(value)
 
         remainder = splittable[cursor:]
 
@@ -114,6 +129,7 @@ class BytestringSplitter(object):
                 import msgpack
             except ImportError:
                 raise RuntimeError("You need to install msgpack to use msgpack_remainder.")
+            # TODO: Again, not very agnostic re: collection type here.
             processed_objects.append(msgpack.loads(remainder))
         elif return_remainder:
             processed_objects.append(remainder)
