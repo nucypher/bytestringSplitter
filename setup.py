@@ -9,7 +9,7 @@ from setuptools.command.install import install
 # Metadata & Deps
 #
 
-PACKAGE_NAME = "bytestring-splitter"
+PACKAGE_NAME = "bytestring_splitter"
 BASE_DIR = os.path.dirname(__file__)
 
 ABOUT = dict()
