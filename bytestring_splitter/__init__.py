@@ -139,6 +139,9 @@ class BytestringSplitter(object):
     def __len__(self):
         return self._length
 
+    def expected_bytes_length(self):
+        return len(self)
+
     def _populate_message_types(self):
         """
         Examine the message types meta passed during __init__.
