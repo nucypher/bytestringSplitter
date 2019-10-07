@@ -5,7 +5,7 @@ from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, By
     BytestringSplittingError
 
 
-def test_splitting_single_message():
+def test_splitting_one_message():
     """
     Strictly speaking, this isn't "splitting" yet - just showing
     that we get the original message back by splitting it into
@@ -50,6 +50,31 @@ def test_arbitrary_object():
     # ...and passed the bytes into their __init__ accordingly.
     assert thing.whatever == b"This is a Thing."
     assert other_thing.whatever == b"This is another Thing."
+
+
+def test_arbitrary_object_as_single():
+    class Thing:
+        def __init__(self, bytes_representaiton):
+            self.whatever = bytes_representaiton
+
+    # We can make a collection with something in it, obviously.
+    bytestring = b"This is a Thing."
+    splitter = BytestringSplitter((Thing, 16))
+    collection_with_thing = splitter(bytestring)
+
+    assert isinstance(collection_with_thing[0], Thing)
+
+    # But by passing single=True, we get the object alone.
+    thing_alone = splitter(bytestring, single=True)
+
+    assert isinstance(thing_alone, Thing)
+
+    # But we can't do single with multiple objects.
+    bytestring = b"This is a Thing.This is another Thing."
+    splitter = BytestringSplitter((Thing, 16), (Thing, 22))
+
+    with pytest.raises(ValueError):
+        splitter(bytestring, single=True)
 
 
 def test_too_many_of_bytes_raises_error():
