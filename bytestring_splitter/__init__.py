@@ -47,7 +47,15 @@ class BytestringSplitter(object):
                     """You can't specify the length of the message as a direct argument to the constructor.
                     Instead, pass it as the second argument in a tuple (with the class as the first argument)""")
 
-    def __call__(self, splittable, return_remainder=False, msgpack_remainder=False):
+    def __call__(self, splittable: bytes, return_remainder=False, msgpack_remainder=False, single=False):
+        """
+        :param splittable: the bytes to be split
+        :param return_remainder: Whether to return any bytes left after splitting.
+        :param msgpack_remainder: Whether to msgpack those bytes.
+        :param single: If this is True, assume that these bytes are a single object (rather than a collection) and return that list
+            or raise an error if there is a remainder.
+        :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
+        """
 
         if not self.is_variable_length:
             if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
@@ -101,11 +109,18 @@ class BytestringSplitter(object):
             else:
                 value = message
 
-            try:
-                processed_objects[message_name] = value
-            except TypeError:
-                processed_objects.append(value)
             cursor = expected_end_of_object_bytes
+
+            if single:
+                _remainder = len(splittable[cursor:])
+                if _remainder:
+                    raise ValueError(f"The bytes don't represent a single {message_class}; there are {_remainder} too many.")  # TODO
+                return value
+            else:
+                try:  # TODO: Make this more agnostic toward the collection type.
+                    processed_objects[message_name] = value
+                except TypeError:
+                    processed_objects.append(value)
 
         remainder = splittable[cursor:]
 
@@ -114,6 +129,7 @@ class BytestringSplitter(object):
                 import msgpack
             except ImportError:
                 raise RuntimeError("You need to install msgpack to use msgpack_remainder.")
+            # TODO: Again, not very agnostic re: collection type here.
             processed_objects.append(msgpack.loads(remainder))
         elif return_remainder:
             processed_objects.append(remainder)
@@ -122,6 +138,9 @@ class BytestringSplitter(object):
 
     def __len__(self):
         return self._length
+
+    def expected_bytes_length(self):
+        return len(self)
 
     def _populate_message_types(self):
         """
@@ -159,18 +178,24 @@ class BytestringSplitter(object):
         except TypeError:
             message_class = message_type
 
+        seeker = 1
+
         try:
             # If a message length has been passed manually, it will be the second item.
             # It might be the class object VariableLengthBytestring, which we use
             # as a flag that this is a variable-length message.
-            message_length = message_type[1]
+            message_length = message_type[seeker]
+            if message_length == VariableLengthBytestring or int(message_type[seeker]):
+                seeker += 1
+            else:
+                raise TypeError("Can't use this as a length.")  # This will move us into the except block below.
         except TypeError:
             try:
                 # If this can be casted as an int, we assume that it's the intended length, in bytes.
                 message_length = int(message_class)
                 message_class = bytes
             except (ValueError, TypeError):
-                # If not, we expect it to be an attribute on the first item.
+                # If not, we expect it to be a method on the first item.
                 message_length = message_class.expected_bytes_length()
         except AttributeError:
             raise TypeError("""No way to know the expected length.  
@@ -178,7 +203,7 @@ class BytestringSplitter(object):
                 set _EXPECTED_LENGTH on the class you're passing.""")
 
         try:
-            kwargs = message_type[2]
+            kwargs = message_type[seeker]
         except (IndexError, TypeError):
             kwargs = {}
 
@@ -229,19 +254,20 @@ class BytestringSplitter(object):
 class BytestringKwargifier(BytestringSplitter):
     processed_objects_container = dict
 
-    def __init__(self, receiver=None, **kwargs):
-        self.receiver = receiver
-        BytestringSplitter.__init__(self, *kwargs.items())
+    def __init__(self, _receiver=None, _additional_kwargs=None, **parameter_pairs):
+        self.receiver = _receiver
+        self._additional_kwargs = _additional_kwargs or {}
+        BytestringSplitter.__init__(self, *parameter_pairs.items())
 
-    def __call__(self, splittable, receiver=None):
+    def __call__(self, splittable, receiver=None, *args, **kwargs):
         receiver = receiver or self.receiver
 
         if receiver is None:
             raise TypeError(
                 "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
 
-        results = BytestringSplitter.__call__(self, splittable, return_remainder=False, msgpack_remainder=False)
-        return receiver(**results)
+        results = BytestringSplitter.__call__(self, splittable, *args, **kwargs)
+        return receiver(**results, **self._additional_kwargs)
 
     @staticmethod
     def _parse_message_meta(message_item):
