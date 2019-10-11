@@ -161,6 +161,10 @@ class BytestringSplitter(object):
                 self.is_variable_length = True
             else:
                 total_length += message_length
+            if isinstance(message_class, BytestringSplitter):
+                # If the message class is itself a splitter, we obviously only want a single from it.
+                # (To use a collection instead, just add another message or use repeat().)
+                kwargs['single'] = True
             self.message_types.append((message_name, message_class, message_length, kwargs))
 
         self._length = total_length
