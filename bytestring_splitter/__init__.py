@@ -15,9 +15,82 @@ class BytestringSplittingError(Exception):
     """
 
 
+class PartiallySplitBytes:
+    """
+    Represents a bytestring which has been split but not instantiated as processed objects yet.
+    """
+    def __init__(self, processed_objects):
+        self.processed_objects = processed_objects
+
+    def finish(self):
+        assert False
+
+
+class PartiallyKwargifiedBytes(PartiallySplitBytes):
+    """
+    Like PartiallySplitBytes, but finishing will also instantiate the final containing object, passing
+    each processed message as a kwarg.
+    """
+    _receiver = None
+    _additional_kwargs = None
+
+    def set_receiver(self, receiver):
+        self._receiver = receiver
+
+    def set_additional_kwargs(self, additional_kwargs):
+        self._additional_kwargs = additional_kwargs
+
+    def set_original_bytes_repr(self, bytes_representation):
+        self._original_bytes = bytes_representation
+
+    def finish(self):
+        finished_values = {}
+        for message_name, (bytes_for_message, message_class, kwargs) in self.processed_objects.items():
+            finished_values[message_name] = produce_value(message_class,
+                                                          message_name,
+                                                          bytes_for_message,
+                                                          kwargs)
+        return self._receiver(**finished_values, **self._additional_kwargs)
+
+    def __getitem__(self, item):
+        # TODO: Is this better as an actual cache?
+        bytes_for_message, message_class, kwargs = self.processed_objects[item]
+        return produce_value(message_class, item, bytes_for_message, kwargs)
+
+    def __bytes__(self):
+        return self._original_bytes
+
+
+def produce_value(message_class, message_name, bytes_for_this_object, kwargs):
+    try:
+        constructor = getattr(message_class, "from_bytes")
+    except AttributeError:
+        constructor = message_class
+
+    try:
+        message = constructor(bytes_for_this_object, **kwargs)
+    except Exception as e:
+        if message_name:
+            error_message = "While constructing {}: ".format(message_name)
+        else:
+            error_message = ""
+        error_message += "Unable to create a {} from {}, got: \n {}: {}".format(message_class,
+                                                                                bytes_for_this_object, e, e.args)
+        raise BytestringSplittingError(error_message)
+
+    message_is_variable_length = isinstance(message, VariableLengthBytestring) or issubclass(message.__class__,
+                                                                                             VariableLengthBytestring)
+    if message_is_variable_length:
+        value = message.message_as_bytes
+    else:
+        value = message
+    return value
+
+
 class BytestringSplitter(object):
     Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
     processed_objects_container = list
+    partial_class = PartiallySplitBytes
 
     def __init__(self, *message_parameters):
         """
@@ -47,11 +120,16 @@ class BytestringSplitter(object):
                     """You can't specify the length of the message as a direct argument to the constructor.
                     Instead, pass it as the second argument in a tuple (with the class as the first argument)""")
 
-    def __call__(self, splittable: bytes, return_remainder=False, msgpack_remainder=False, single=False):
+    def __call__(self, splittable: bytes,
+                 return_remainder=False,
+                 msgpack_remainder=False,
+                 partial=False,
+                 single=False):
         """
         :param splittable: the bytes to be split
         :param return_remainder: Whether to return any bytes left after splitting.
         :param msgpack_remainder: Whether to msgpack those bytes.
+        :param partial: Whether to actually instantiate messages as their respective classes, or return the bytes with their classes as tuples.
         :param single: If this is True, assume that these bytes are a single object (rather than a collection) and return that list
             or raise an error if there is a remainder.
         :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
@@ -88,26 +166,17 @@ class BytestringSplitter(object):
             expected_end_of_object_bytes = cursor + message_length
             bytes_for_this_object = splittable[cursor:expected_end_of_object_bytes]
 
-            try:
-                constructor = getattr(message_class, "from_bytes")
-            except AttributeError:
-                constructor = message_class
+            if partial:
+                try:  # TODO: Make this more agnostic toward the collection type.
+                    processed_objects[message_name] = bytes_for_this_object, message_class, kwargs
+                except TypeError:
+                    processed_objects.append((bytes_for_this_object, message_class))
+                cursor = expected_end_of_object_bytes
+                continue
 
-            try:
-                message = constructor(bytes_for_this_object, **kwargs)
-            except Exception as e:
-                if message_name:
-                    error_message = "While constructing {}: ".format(message_name)
-                else:
-                    error_message = ""
-                error_message += "Unable to create a {} from {}, got: \n {}: {}".format(message_class, bytes_for_this_object, e, e.args)
-                raise BytestringSplittingError(error_message)
-
-            message_is_variable_length = isinstance(message, VariableLengthBytestring) or issubclass(message.__class__, VariableLengthBytestring)
-            if message_is_variable_length:
-                value = message.message_as_bytes
-            else:
-                value = message
+            # FINISHING
+            value = produce_value(message_class, message_name, bytes_for_this_object, kwargs)
+            ####################
 
             cursor = expected_end_of_object_bytes
 
@@ -133,6 +202,9 @@ class BytestringSplitter(object):
             processed_objects.append(msgpack.loads(remainder))
         elif return_remainder:
             processed_objects.append(remainder)
+
+        if partial:
+            return self.partial_class(processed_objects)
 
         return processed_objects
 
@@ -257,21 +329,29 @@ class BytestringSplitter(object):
 
 class BytestringKwargifier(BytestringSplitter):
     processed_objects_container = dict
+    partial_class = PartiallyKwargifiedBytes
 
-    def __init__(self, _receiver=None, _additional_kwargs=None, **parameter_pairs):
+    def __init__(self, _receiver=None, _partial_receiver=None, _additional_kwargs=None, **parameter_pairs):
         self.receiver = _receiver
+        self.partial_class = _partial_receiver
         self._additional_kwargs = _additional_kwargs or {}
         BytestringSplitter.__init__(self, *parameter_pairs.items())
 
-    def __call__(self, splittable, receiver=None, *args, **kwargs):
+    def __call__(self, splittable, receiver=None, partial=False, *args, **kwargs):
         receiver = receiver or self.receiver
 
         if receiver is None:
             raise TypeError(
                 "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
 
-        results = BytestringSplitter.__call__(self, splittable, *args, **kwargs)
-        return receiver(**results, **self._additional_kwargs)
+        result = BytestringSplitter.__call__(self, splittable, partial=partial, *args, **kwargs)
+        if partial:
+            result.set_receiver(receiver)
+            result.set_additional_kwargs(self._additional_kwargs)
+            result.set_original_bytes_repr(splittable)
+            return result
+        else:
+            return receiver(**result, **self._additional_kwargs)
 
     @staticmethod
     def _parse_message_meta(message_item):
