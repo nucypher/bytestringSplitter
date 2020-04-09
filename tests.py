@@ -218,32 +218,49 @@ def test_passing_kwargs_along_with_bytes():
 
     assert result[0].what_it_be == things_as_bytes[:35]
 
-
-def test_fabricate_object():
-
-    class ThingToBeFabricated():
-        def __init__(self, thing1, thing2, thing3):
-            self.thing1 = thing1
-            self.thing2 = thing2
-            self.thing3 = thing3
-
-    fab = BytestringKwargifier(
-        ThingToBeFabricated,
-        thing1=VariableLengthBytestring,
-        thing2=(bytes, 13),
-        thing3=(int, 2, {"byteorder": "big"})
-    )
-
-    bytes_to_fab = VariableLengthBytestring(b"dingos") + b"peace_at_dawn" + int(54453).to_bytes(2, byteorder="big")
-
-    fabricated_object = fab(bytes_to_fab)
-    assert fabricated_object.thing1 == b"dingos"
-    assert fabricated_object.thing2 == b"peace_at_dawn"
-    assert fabricated_object.thing3 == 54453
-
-
-def test_bundle_and_split_variable_length():
+def test_bundle_and_dispense_variable_length():
     items = [b'llamas', b'dingos', b'christmas-tree']
     vbytes = bytes(VariableLengthBytestring.bundle(items))
     items_again = VariableLengthBytestring.dispense(vbytes)
     assert items == items_again
+
+"""
+Kwargifier Tests
+"""
+
+class DeliciousCoffee():
+    def __init__(self, blend, milk_type, size):
+        self.blend = blend
+        self.milk_type = milk_type
+        self.size = size
+
+    def sip(self):
+        return "Mmmm"
+
+coffee_splitter = BytestringKwargifier(
+    DeliciousCoffee,
+    blend=VariableLengthBytestring,
+    milk_type=(bytes, 13),
+    size=(int, 2, {"byteorder": "big"})
+)
+
+
+def test_kwargified_coffee():
+    coffee_as_bytes = VariableLengthBytestring(b"Equal Exchange Mind, Body, and Soul") + b"local_oatmilk" + int(54453).to_bytes(2, byteorder="big")
+
+    cup_of_coffee = coffee_splitter(coffee_as_bytes)
+    assert cup_of_coffee.blend == b"Equal Exchange Mind, Body, and Soul"
+    assert cup_of_coffee.milk_type == b"local_oatmilk"
+    assert cup_of_coffee.size == 54453
+
+
+def test_partial_instantiation():
+    coffee_as_bytes = VariableLengthBytestring(b"Sandino Roasters Blend") + b"half_and_half" + int(16).to_bytes(2, byteorder="big")
+
+    brewing_coffee = coffee_splitter(coffee_as_bytes, partial=True)
+
+    with pytest.raises(AttributeError):
+        brewing_coffee.sip()
+
+    cup_of_coffee = brewing_coffee.finish()
+    assert cup_of_coffee.sip() == "Mmmm"
