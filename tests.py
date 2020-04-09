@@ -270,4 +270,16 @@ def test_just_in_time_attribute_resolution():
     coffee_as_bytes = VariableLengthBytestring(b"Democracy Coffee") + b"half_and_half" + int(16).to_bytes(2, byteorder="big")
 
     brewing_coffee = coffee_splitter(coffee_as_bytes, partial=True)
+    assert brewing_coffee._finished_values == {}
+
     blend = brewing_coffee.blend
+    assert blend == b"Democracy Coffee"
+
+    assert brewing_coffee._finished_values == {'blend': b'Democracy Coffee'}
+
+    # Still can't sip, though.
+    with pytest.raises(AttributeError):
+        brewing_coffee.sip()
+
+    cup_of_coffee = brewing_coffee.finish()
+    assert cup_of_coffee.sip() == "Mmmm"
