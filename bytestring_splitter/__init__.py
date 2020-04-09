@@ -90,7 +90,7 @@ def produce_value(message_class, message_name, bytes_for_this_object, kwargs):
 class BytestringSplitter(object):
     Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
     processed_objects_container = list
-    partial_class = PartiallySplitBytes
+    partial_receiver = PartiallySplitBytes
 
     def __init__(self, *message_parameters):
         """
@@ -204,8 +204,7 @@ class BytestringSplitter(object):
             processed_objects.append(remainder)
 
         if partial:
-            return self.partial_class(processed_objects)
-
+            return self.partial_receiver(processed_objects)
         return processed_objects
 
     def __len__(self):
@@ -329,11 +328,12 @@ class BytestringSplitter(object):
 
 class BytestringKwargifier(BytestringSplitter):
     processed_objects_container = dict
-    partial_class = PartiallyKwargifiedBytes
+    partial_receiver = PartiallyKwargifiedBytes
 
     def __init__(self, _receiver=None, _partial_receiver=None, _additional_kwargs=None, **parameter_pairs):
         self.receiver = _receiver
-        self.partial_class = _partial_receiver
+        if _partial_receiver is not None:
+            self.partial_receiver = _partial_receiver
         self._additional_kwargs = _additional_kwargs or {}
         BytestringSplitter.__init__(self, *parameter_pairs.items())
 
