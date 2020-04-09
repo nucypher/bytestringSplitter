@@ -34,6 +34,10 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
     _receiver = None
     _additional_kwargs = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._finished_values = {}
+
     def set_receiver(self, receiver):
         self._receiver = receiver
 
