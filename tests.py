@@ -281,5 +281,9 @@ def test_just_in_time_attribute_resolution():
     with pytest.raises(AttributeError):
         brewing_coffee.sip()
 
+    # Again.  This time, we'll get the cached value (though the experience to the user is the same).
+    blend = brewing_coffee.blend
+    assert blend == b"Democracy Coffee"
+
     cup_of_coffee = brewing_coffee.finish()
     assert cup_of_coffee.sip() == "Mmmm"

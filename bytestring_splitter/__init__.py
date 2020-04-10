@@ -57,6 +57,12 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
         return self._receiver(**self._finished_values, **self._additional_kwargs)
 
     def __getattr__(self, message_name):
+        # First we'll try to see if this message_name already has a finished value:
+        try:
+            return self._finished_values[message_name]
+        except KeyError:  # suppress might be good here, but it appears to have a performance penalty, and this is a performance-concerned function.
+            pass
+
         try:
             bytes_for_message, message_class, kwargs = self.processed_objects[message_name]
             self._finished_values[message_name] = produce_value(message_class,
@@ -67,7 +73,7 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
             del self.processed_objects[message_name]  # We don't do this as a pop() in case produce_value raises.
             return produced_value
         except KeyError:
-            return super().__getattr__(message_name)
+            raise AttributeError(f"{self.__class__} doesn't have a {message_name}, and it's not a partially split object either; those are {list(self.processed_objects.keys())}")
 
 
     def __bytes__(self):
