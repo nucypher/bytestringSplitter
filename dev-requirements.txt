@@ -1,10 +1,7 @@
 -i https://pypi.python.org/simple
 attrs==19.3.0
 bumpversion==0.5.3
-certifi==2020.4.5.1
-chardet==3.0.4
 coverage==5.1
-idna==2.9
 importlib-metadata==1.6.0 ; python_version < '3.8'
 more-itertools==8.2.0
 packaging==20.3
@@ -13,10 +10,6 @@ py==1.8.1
 pyparsing==3.0.0a1
 pytest-cov==2.5.1
 pytest==5.4.1
-python-coveralls==2.9.3
-pyyaml==5.3.1
-requests==2.23.0
 six==1.14.0
-urllib3==1.25.8
 wcwidth==0.1.9
 zipp==3.1.0
