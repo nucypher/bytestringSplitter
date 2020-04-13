@@ -1,1 +1,2 @@
+-i https://pypi.python.org/simple
 msgpack-python==0.5.6
