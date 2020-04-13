@@ -34,6 +34,10 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
     _receiver = None
     _additional_kwargs = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._finished_values = {}
+
     def set_receiver(self, receiver):
         self._receiver = receiver
 
@@ -44,18 +48,33 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
         self._original_bytes = bytes_representation
 
     def finish(self):
-        finished_values = {}
+
         for message_name, (bytes_for_message, message_class, kwargs) in self.processed_objects.items():
-            finished_values[message_name] = produce_value(message_class,
+            self._finished_values[message_name] = produce_value(message_class,
                                                           message_name,
                                                           bytes_for_message,
                                                           kwargs)
-        return self._receiver(**finished_values, **self._additional_kwargs)
+        return self._receiver(**self._finished_values, **self._additional_kwargs)
 
-    def __getitem__(self, item):
-        # TODO: Is this better as an actual cache?
-        bytes_for_message, message_class, kwargs = self.processed_objects[item]
-        return produce_value(message_class, item, bytes_for_message, kwargs)
+    def __getattr__(self, message_name):
+        # First we'll try to see if this message_name already has a finished value:
+        try:
+            return self._finished_values[message_name]
+        except KeyError:  # suppress might be good here, but it appears to have a performance penalty, and this is a performance-concerned function.
+            pass
+
+        try:
+            bytes_for_message, message_class, kwargs = self.processed_objects[message_name]
+            self._finished_values[message_name] = produce_value(message_class,
+                                                               message_name,
+                                                               bytes_for_message,
+                                                               kwargs)
+            produced_value = produce_value(message_class, message_name, bytes_for_message, kwargs)
+            del self.processed_objects[message_name]  # We don't do this as a pop() in case produce_value raises.
+            return produced_value
+        except KeyError:
+            raise AttributeError(f"{self.__class__} doesn't have a {message_name}, and it's not a partially split object either; those are {list(self.processed_objects.keys())}")
+
 
     def __bytes__(self):
         return self._original_bytes
@@ -90,7 +109,7 @@ def produce_value(message_class, message_name, bytes_for_this_object, kwargs):
 class BytestringSplitter(object):
     Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
     processed_objects_container = list
-    partial_class = PartiallySplitBytes
+    partial_receiver = PartiallySplitBytes
 
     def __init__(self, *message_parameters):
         """
@@ -204,8 +223,7 @@ class BytestringSplitter(object):
             processed_objects.append(remainder)
 
         if partial:
-            return self.partial_class(processed_objects)
-
+            return self.partial_receiver(processed_objects)
         return processed_objects
 
     def __len__(self):
@@ -329,11 +347,12 @@ class BytestringSplitter(object):
 
 class BytestringKwargifier(BytestringSplitter):
     processed_objects_container = dict
-    partial_class = PartiallyKwargifiedBytes
+    partial_receiver = PartiallyKwargifiedBytes
 
     def __init__(self, _receiver=None, _partial_receiver=None, _additional_kwargs=None, **parameter_pairs):
         self.receiver = _receiver
-        self.partial_class = _partial_receiver
+        if _partial_receiver is not None:
+            self.partial_receiver = _partial_receiver
         self._additional_kwargs = _additional_kwargs or {}
         BytestringSplitter.__init__(self, *parameter_pairs.items())
 
