@@ -292,8 +292,8 @@ class BytestringSplitter(object):
                 # If not, we expect it to be a method on the first item.
                 message_length = message_class.expected_bytes_length()
         except AttributeError:
-            raise TypeError("""No way to know the expected length.  
-                Either pass it as the second member of a tuple or 
+            raise TypeError("""No way to know the expected length.
+                Either pass it as the second member of a tuple or
                 set _EXPECTED_LENGTH on the class you're passing.""")
 
         try:
@@ -348,13 +348,18 @@ class BytestringSplitter(object):
 class BytestringKwargifier(BytestringSplitter):
     processed_objects_container = dict
     partial_receiver = PartiallyKwargifiedBytes
+    __splitterbaseclass = BytestringSplitter
+
+    @classmethod
+    def _baseclass(cls):
+        return cls.__splitterbaseclass
 
     def __init__(self, _receiver=None, _partial_receiver=None, _additional_kwargs=None, **parameter_pairs):
         self.receiver = _receiver
         if _partial_receiver is not None:
             self.partial_receiver = _partial_receiver
         self._additional_kwargs = _additional_kwargs or {}
-        BytestringSplitter.__init__(self, *parameter_pairs.items())
+        self._baseclass().__init__(self, *parameter_pairs.items())
 
     def __call__(self, splittable, receiver=None, partial=False, *args, **kwargs):
         receiver = receiver or self.receiver
@@ -363,7 +368,7 @@ class BytestringKwargifier(BytestringSplitter):
             raise TypeError(
                 "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
 
-        result = BytestringSplitter.__call__(self, splittable, partial=partial, *args, **kwargs)
+        result = self._baseclass().__call__(self, splittable, partial=partial, *args, **kwargs)
         if partial:
             result.set_receiver(receiver)
             result.set_additional_kwargs(self._additional_kwargs)
@@ -377,6 +382,61 @@ class BytestringKwargifier(BytestringSplitter):
         message_name, message_type = message_item
         _, message_class, message_length, kwargs = BytestringSplitter._parse_message_meta(message_type)
         return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
+
+
+class VersionedBytestringSplitter(BytestringSplitter):
+    """
+    Prepend 'version' bytes onto the beginning of this bytestring at serialization time.
+    When deserializing, use these bytes to provide information to consuming code about what
+    version of the bytes in question these are.  Implementer to decide how knowing this is useful.
+    """
+
+    VERSION_HEADER_LENGTH = 2
+
+    def __len__(self):
+        return super().__len__() + self.VERSION_HEADER_LENGTH
+
+    def __call__(self, splittable, *args, **kwargs):
+        version, splittable = self._pop_version(splittable)
+        splitter = super().__call__(splittable, *args, **kwargs)
+        splitter._bytes_version = version
+        return splitter
+
+    @classmethod
+    def assign_version(cls, klass, some_bytes, version=None):
+        """
+        If version is not supplied, try getting it from the class that is serializing itself
+        or maybe that thing's bytestringsplitter
+        """
+        version = version or getattr(klass, 'version', None) or getattr(cls, '_bytes_version', None)
+        if not version:
+            raise ValueError("could not determine version of VersionedBytes and none was supplied")
+        return cls._prepend_version(version, some_bytes)
+
+    @classmethod
+    def _prepend_version(cls, version, some_bytes):
+        return version.to_bytes(cls.VERSION_HEADER_LENGTH, "big") + some_bytes
+
+    def _pop_version(self, some_bytes):
+        version_bytes = some_bytes[:self.VERSION_HEADER_LENGTH]
+        return int.from_bytes(version_bytes, 'big'), some_bytes[self.VERSION_HEADER_LENGTH:]
+
+    @property
+    def version(self):
+        return getattr(self, '_bytes_version', None)
+
+
+class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
+    """
+    A BytestringKwargifier (whatever that is...) which is versioned.
+    """
+    __splitterbaseclass = VersionedBytestringSplitter
+
+    @staticmethod
+    def _parse_message_meta(message_item):
+        message_name, message_type = message_item
+        _, message_class, message_length, kwargs = VersionedBytestringSplitter._parse_message_meta(message_type)
+        return VersionedBytestringSplitter.Message(message_name, message_class, message_length, kwargs)
 
 
 class VariableLengthBytestring:
