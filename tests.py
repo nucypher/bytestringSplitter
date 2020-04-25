@@ -2,7 +2,7 @@ import msgpack
 import pytest
 
 from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringKwargifier, \
-    BytestringSplittingError
+    BytestringSplittingError, VersionedBytestringSplitter, VersionedBytestringKwargifier
 
 
 def test_splitting_one_message():
@@ -237,6 +237,7 @@ class DeliciousCoffee():
     def sip(self):
         return "Mmmm"
 
+
 coffee_splitter = BytestringKwargifier(
     DeliciousCoffee,
     blend=VariableLengthBytestring,
@@ -287,3 +288,86 @@ def test_just_in_time_attribute_resolution():
 
     cup_of_coffee = brewing_coffee.finish()
     assert cup_of_coffee.sip() == "Mmmm"
+
+
+class CaffeinatedBeverage:
+
+    def __bytes__(self):
+        mybytes = b''
+        for arg in self.args:
+            mybytes += getattr(self, arg)
+        return BeverageFactory.add_version(self, mybytes)
+
+
+class OldFashionedCoffee(CaffeinatedBeverage, DeliciousCoffee):
+    version = 1
+    args = ['blend', 'milk_type', 'size']
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.blend = VariableLengthBytestring(self.blend)
+
+
+class EnergyDrink(CaffeinatedBeverage):
+    version = 2
+    args = ['name', 'warning_label', 'active_ingredient', 'size']
+
+    def __init__(self, name, warning_label, active_ingredient, size):
+        self.name = VariableLengthBytestring(name)
+        self.warning_label = VariableLengthBytestring(warning_label)
+        self.active_ingredient = active_ingredient
+        self.size = size
+
+
+class BeverageFactory:
+    splitters = [
+        VersionedBytestringKwargifier(
+            OldFashionedCoffee,
+            blend=VariableLengthBytestring,
+            milk_type=(bytes, 13),
+            size=(int, 2, {"byteorder": "big"}),
+            version=1
+        ),
+        VersionedBytestringKwargifier(
+            EnergyDrink,
+            name=VariableLengthBytestring,
+            warning_label=VariableLengthBytestring,
+            active_ingredient=(bytes, 11),
+            size=(int, 2, {"byteorder": "big"}),
+            version=2
+        )
+    ]
+
+    @staticmethod
+    def from_bytes(some_bytes):
+        version, _ = VersionedBytestringSplitter.pop_version(some_bytes)
+        return BeverageFactory.splitters[version - 1](some_bytes)
+
+    @staticmethod
+    def add_version(instance, instance_bytes):
+        return BeverageFactory.splitters[instance.version - 1].assign_version(instance, instance_bytes)
+
+
+def test_instantiate_from_versionedbytes():
+
+    unknown_beverage_1_bytes = int(1).to_bytes(2, byteorder="big") + VariableLengthBytestring(b"Equal Exchange Mind, Body, and Soul") + b"local_oatmilk" + int(54453).to_bytes(2, byteorder="big")
+    unknown_beverage_2_bytes = int(2).to_bytes(2, byteorder="big") + VariableLengthBytestring(b"MegaBlaster") + VariableLengthBytestring(b"Avoid consumption after 6pm") + b"blastamine5" + int(54453).to_bytes(2, byteorder="big")
+
+    bev1 = BeverageFactory.from_bytes(unknown_beverage_1_bytes)
+    bev2 = BeverageFactory.from_bytes(unknown_beverage_2_bytes)
+    assert isinstance(bev1, OldFashionedCoffee)
+    assert bev1.milk_type == b"local_oatmilk"
+    assert isinstance(bev2, EnergyDrink)
+    assert bev2.name == b'MegaBlaster'
+
+
+def test_versioned_instances_to_bytes():
+
+    coffee = OldFashionedCoffee(b"I'm better without milk", b'local_oatmilk', int(1).to_bytes(2, byteorder="big"))
+    energy = EnergyDrink(b"Megablaster", b"why you drinking this stuff?", b"FD&CYellow5", int(1).to_bytes(2, byteorder="big"))
+
+    assert bytes(coffee).startswith(b'\x00\x01')
+    assert bytes(energy).startswith(b'\x00\x02')
+
+    # one more round trip just to me certain
+    assert isinstance(BeverageFactory.from_bytes(bytes(coffee)), OldFashionedCoffee)
+    assert isinstance(BeverageFactory.from_bytes(bytes(energy)), EnergyDrink)
