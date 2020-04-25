@@ -397,18 +397,18 @@ class VersionedBytestringSplitter(BytestringSplitter):
         return super().__len__() + self.VERSION_HEADER_LENGTH
 
     def __call__(self, splittable, *args, **kwargs):
-        version, splittable = self._pop_version(splittable)
+        version, splittable = self.pop_version(splittable)
         splitter = super().__call__(splittable, *args, **kwargs)
-        splitter._bytes_version = version
+        splitter.version_from_bytes = version
         return splitter
 
     @classmethod
     def assign_version(cls, klass, some_bytes, version=None):
         """
         If version is not supplied, try getting it from the class that is serializing itself
-        or maybe that thing's bytestringsplitter
+        or maybe that thing's bytestringsplitter?
         """
-        version = version or getattr(klass, 'version', None) or getattr(cls, '_bytes_version', None)
+        version = version or getattr(klass, 'version', None) or getattr(cls, 'version_from_bytes', None)
         if not version:
             raise ValueError("could not determine version of VersionedBytes and none was supplied")
         return cls._prepend_version(version, some_bytes)
@@ -417,13 +417,14 @@ class VersionedBytestringSplitter(BytestringSplitter):
     def _prepend_version(cls, version, some_bytes):
         return version.to_bytes(cls.VERSION_HEADER_LENGTH, "big") + some_bytes
 
-    def _pop_version(self, some_bytes):
-        version_bytes = some_bytes[:self.VERSION_HEADER_LENGTH]
-        return int.from_bytes(version_bytes, 'big'), some_bytes[self.VERSION_HEADER_LENGTH:]
+    @classmethod
+    def pop_version(cls, some_bytes):
+        version_bytes = some_bytes[:cls.VERSION_HEADER_LENGTH]
+        return int.from_bytes(version_bytes, 'big'), some_bytes[cls.VERSION_HEADER_LENGTH:]
 
     @property
     def version(self):
-        return getattr(self, '_bytes_version', None)
+        return getattr(self, 'version_from_bytes', None)
 
 
 class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
@@ -431,6 +432,10 @@ class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwarg
     A BytestringKwargifier (whatever that is...) which is versioned.
     """
     __splitterbaseclass = VersionedBytestringSplitter
+
+    def __init__(self, *args, **kwargs):
+        self._input_version = kwargs.pop('version')
+        super().__init__(*args, **kwargs)
 
     @staticmethod
     def _parse_message_meta(message_item):
