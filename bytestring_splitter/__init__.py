@@ -408,7 +408,7 @@ class VersionedBytestringSplitter(BytestringSplitter):
         If version is not supplied, try getting it from the class that is serializing itself
         or maybe that thing's bytestringsplitter?
         """
-        version = version or getattr(klass, 'version', None) or getattr(cls, 'version_from_bytes', None)
+        version = version or getattr(klass, 'version', None) or getattr(cls, '_input_version', None)
         if not version:
             raise ValueError("could not determine version of VersionedBytes and none was supplied")
         return cls._prepend_version(version, some_bytes)
@@ -421,10 +421,6 @@ class VersionedBytestringSplitter(BytestringSplitter):
     def pop_version(cls, some_bytes):
         version_bytes = some_bytes[:cls.VERSION_HEADER_LENGTH]
         return int.from_bytes(version_bytes, 'big'), some_bytes[cls.VERSION_HEADER_LENGTH:]
-
-    @property
-    def version(self):
-        return getattr(self, 'version_from_bytes', None)
 
 
 class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
