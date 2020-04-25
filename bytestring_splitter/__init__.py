@@ -394,6 +394,9 @@ class VersionedBytestringSplitter(BytestringSplitter):
     VERSION_HEADER_LENGTH = 2
 
     def __len__(self):
+        """ Version bytes are always removed prior to any mechanics of bytestringsplitters,
+        so we need to add our version header length back on since these bytes will never
+        be present during normal activities"""
         return super().__len__() + self.VERSION_HEADER_LENGTH
 
     def __call__(self, splittable, *args, **kwargs):
@@ -410,7 +413,7 @@ class VersionedBytestringSplitter(BytestringSplitter):
         """
         version = version or getattr(klass, 'version', None) or getattr(cls, '_input_version', None)
         if not version:
-            raise ValueError("could not determine version of VersionedBytes and none was supplied")
+            raise ValueError("could not determine version to assign to output bytes and none was supplied")
         return cls._prepend_version(version, some_bytes)
 
     @classmethod
@@ -425,7 +428,7 @@ class VersionedBytestringSplitter(BytestringSplitter):
 
 class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
     """
-    A BytestringKwargifier (whatever that is...) which is versioned.
+    A BytestringKwargifier which is versioned.
     """
     __splitterbaseclass = VersionedBytestringSplitter
 
