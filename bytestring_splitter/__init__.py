@@ -384,46 +384,72 @@ class BytestringKwargifier(BytestringSplitter):
         return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
 
 
-class VersionedBytestringSplitter(BytestringSplitter):
+class HeaderMetaDataMixinBase(BytestringSplitter):
     """
     Prepend 'version' bytes onto the beginning of this bytestring at serialization time.
     When deserializing, use these bytes to provide information to consuming code about what
     version of the bytes in question these are.  Implementer to decide how knowing this is useful.
     """
 
-    VERSION_HEADER_LENGTH = 2
-
     def __len__(self):
         """ Version bytes are always removed prior to any mechanics of bytestringsplitters,
         so we need to add our version header length back on since these bytes will never
         be present during normal activities"""
-        return super().__len__() + self.VERSION_HEADER_LENGTH
+        return super().__len__() + self.HEADER_LENGTH
 
     def __call__(self, splittable, *args, **kwargs):
-        version, splittable = self.pop_version(splittable)
+        version = self.get_metadata(splittable)[self.METADATA_TAG]
+        splittable = self.remove_metadata(splittable)
         splitter = super().__call__(splittable, *args, **kwargs)
-        splitter.version_from_bytes = version
         return splitter
 
     @classmethod
-    def assign_version(cls, klass, some_bytes, version=None):
+    def assign_metadata(cls, klass, some_bytes, value=None):
         """
-        If version is not supplied, try getting it from the class that is serializing itself
+        If value is not supplied, try getting it from the class that is serializing itself
         or maybe that thing's bytestringsplitter?
         """
-        version = version or getattr(klass, 'version', None) or getattr(cls, '_input_version', None)
-        if not version:
-            raise ValueError("could not determine version to assign to output bytes and none was supplied")
-        return cls._prepend_version(version, some_bytes)
+        data = value or getattr(klass, cls.METADATA_TAG, None) or getattr(cls, f'_input_{cls.METADATA_TAG}', None)
+        if not data:
+            raise ValueError(f"could not determine {cls.METADATA_TAG} to assign to output bytes and none was supplied")
+        return cls._prepend_metadata(data, some_bytes)
 
     @classmethod
-    def _prepend_version(cls, version, some_bytes):
-        return version.to_bytes(cls.VERSION_HEADER_LENGTH, "big") + some_bytes
+    def _prepend_metadata(cls, data, some_bytes):
+        return data.to_bytes(cls.HEADER_LENGTH, "big") + some_bytes
+
+    def remove_metadata(self, some_bytes):
+        return some_bytes[self.HEADER_LENGTH:]
 
     @classmethod
-    def pop_version(cls, some_bytes):
-        version_bytes = some_bytes[:cls.VERSION_HEADER_LENGTH]
-        return int.from_bytes(version_bytes, 'big'), some_bytes[cls.VERSION_HEADER_LENGTH:]
+    def get_metadata(cls, some_bytes):
+
+        try:
+            data = super().get_metadata(some_bytes)
+        except AttributeError:
+            data = {}
+
+        data_bytes = some_bytes[:cls.HEADER_LENGTH]
+        data[cls.METADATA_TAG] = cls.deserialize_header_bytes(data_bytes)
+
+        return data
+
+    @classmethod
+    def deserialize_header_bytes(cls, data_bytes):
+        raise NotImplementedError
+
+
+class VersioningMixin(HeaderMetaDataMixinBase):
+
+    HEADER_LENGTH = 2
+    METADATA_TAG = 'version'
+
+    @classmethod
+    def deserialize_header_bytes(cls, data_bytes):
+        return int.from_bytes(data_bytes, 'big')
+
+class VersionedBytestringSplitter(VersioningMixin, BytestringSplitter):
+    pass
 
 
 class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
@@ -441,6 +467,9 @@ class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwarg
         message_name, message_type = message_item
         _, message_class, message_length, kwargs = VersionedBytestringSplitter._parse_message_meta(message_type)
         return VersionedBytestringSplitter.Message(message_name, message_class, message_length, kwargs)
+
+
+
 
 
 class VariableLengthBytestring:

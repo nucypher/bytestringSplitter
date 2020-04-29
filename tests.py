@@ -339,12 +339,12 @@ class BeverageFactory:
 
     @staticmethod
     def from_bytes(some_bytes):
-        version, _ = VersionedBytestringSplitter.pop_version(some_bytes)
+        version = VersionedBytestringSplitter.get_metadata(some_bytes)['version']
         return BeverageFactory.splitters[version - 1](some_bytes)
 
     @staticmethod
     def add_version(instance, instance_bytes):
-        return BeverageFactory.splitters[instance.version - 1].assign_version(instance, instance_bytes)
+        return BeverageFactory.splitters[instance.version - 1].assign_metadata(instance, instance_bytes)
 
 
 def test_instantiate_from_versionedbytes():
