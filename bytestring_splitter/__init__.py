@@ -398,8 +398,7 @@ class HeaderMetaDataMixinBase(BytestringSplitter):
         return super().__len__() + self.HEADER_LENGTH
 
     def __call__(self, splittable, *args, **kwargs):
-        version = self.get_metadata(splittable)[self.METADATA_TAG]
-        splittable = self.remove_metadata(splittable)
+        splittable = self._remove_metadata(splittable)
         splitter = super().__call__(splittable, *args, **kwargs)
         return splitter
 
@@ -412,13 +411,13 @@ class HeaderMetaDataMixinBase(BytestringSplitter):
         data = value or getattr(klass, cls.METADATA_TAG, None) or getattr(cls, f'_input_{cls.METADATA_TAG}', None)
         if not data:
             raise ValueError(f"could not determine {cls.METADATA_TAG} to assign to output bytes and none was supplied")
-        return cls._prepend_metadata(data, some_bytes)
+        return cls._prepend_metadata(cls._serialize_metadata(data), some_bytes)
 
     @classmethod
     def _prepend_metadata(cls, data, some_bytes):
-        return data.to_bytes(cls.HEADER_LENGTH, "big") + some_bytes
+        return data + some_bytes
 
-    def remove_metadata(self, some_bytes):
+    def _remove_metadata(self, some_bytes):
         return some_bytes[self.HEADER_LENGTH:]
 
     @classmethod
@@ -430,12 +429,16 @@ class HeaderMetaDataMixinBase(BytestringSplitter):
             data = {}
 
         data_bytes = some_bytes[:cls.HEADER_LENGTH]
-        data[cls.METADATA_TAG] = cls.deserialize_header_bytes(data_bytes)
+        data[cls.METADATA_TAG] = cls._deserialize_metadata(data_bytes)
 
         return data
 
     @classmethod
-    def deserialize_header_bytes(cls, data_bytes):
+    def _deserialize_metadata(cls, data_bytes):
+        raise NotImplementedError
+
+    @classmethod
+    def _serialize_metadata(cls, data_bytes):
         raise NotImplementedError
 
 
@@ -445,8 +448,13 @@ class VersioningMixin(HeaderMetaDataMixinBase):
     METADATA_TAG = 'version'
 
     @classmethod
-    def deserialize_header_bytes(cls, data_bytes):
+    def _deserialize_metadata(cls, data_bytes):
         return int.from_bytes(data_bytes, 'big')
+
+    @classmethod
+    def _serialize_metadata(cls, value):
+        return value.to_bytes(cls.HEADER_LENGTH, "big")
+
 
 class VersionedBytestringSplitter(VersioningMixin, BytestringSplitter):
     pass
@@ -467,9 +475,6 @@ class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwarg
         message_name, message_type = message_item
         _, message_class, message_length, kwargs = VersionedBytestringSplitter._parse_message_meta(message_type)
         return VersionedBytestringSplitter.Message(message_name, message_class, message_length, kwargs)
-
-
-
 
 
 class VariableLengthBytestring:
