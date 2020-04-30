@@ -191,6 +191,24 @@ def test_checksum_validation():
     assert fivevsix_result == [b'alice', b' recently adopted a ', b'puppy']
 
 
+def test_same_signatures_validate():
+
+    three_v_three_splitter = ChecksumVerifyingSplitter(
+        3,
+        VariableLengthBytestring,
+        3
+    )
+
+    other_similar_splitter = ChecksumVerifyingSplitter(
+        3,
+        VariableLengthBytestring,
+        3
+    )
+
+    assert three_v_three_splitter.generate_checksum() == other_similar_splitter.generate_checksum()
+    assert three_v_three_splitter.validate_checksum(other_similar_splitter.generate_checksum())
+
+
 def test_checksum_exception():
 
     attack_splitter = ChecksumVerifyingSplitter(
