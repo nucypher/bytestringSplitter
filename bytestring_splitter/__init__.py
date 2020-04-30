@@ -395,14 +395,17 @@ class HeaderMetaDataMixinBase:
         """
         returns mixins inheriting from HeaderMetaDataMixinBase in MRO order
         for the purpose of removing or adding bytes in the correct order
+
+        This allows for metadata to be added and removed from the bytestsring in the
+        same order that the mixins are declared in the class definition.
         """
 
         mixins = [
-            kls for kls in cls.__mro__ if
-            issubclass(kls, HeaderMetaDataMixinBase)
-            and not issubclass(kls, BytestringSplitter) and kls
-            is not HeaderMetaDataMixinBase and kls
-            is not cls
+            subclass for subclass in cls.__mro__ if
+            issubclass(subclass, HeaderMetaDataMixinBase)
+            and not issubclass(subclass, BytestringSplitter)
+            and subclass is not HeaderMetaDataMixinBase
+            and subclass is not cls
             ]
 
         # if an implementer creates a splitter by directly subclassing this baseclass and BytestringSplitter
@@ -432,14 +435,14 @@ class HeaderMetaDataMixinBase:
         prepends the metadata bytes to the supplied bytestring for all mixins in the chain
         """
 
-        for kls in cls._get_ordered_mixin_chain(reversed=True):
+        for subclass in cls._get_ordered_mixin_chain(reversed=True):
 
             # if a splitter has class attributes that override
             # a mixin's TAG, we should pass them in in the kwargs here
-            if hasattr(cls, kls.METADATA_TAG) and not kwargs.get(kls.METADATA_TAG):
-                kwargs[kls.METADATA_TAG] = getattr(cls, kls.METADATA_TAG)
+            if hasattr(cls, subclass.METADATA_TAG) and not kwargs.get(subclass.METADATA_TAG):
+                kwargs[subclass.METADATA_TAG] = getattr(cls, subclass.METADATA_TAG)
 
-            some_bytes = kls._assign_metadata(some_bytes, **kwargs)
+            some_bytes = subclass._assign_metadata(some_bytes, **kwargs)
 
         return some_bytes
         return cls._assign_metadata(some_bytes, **kwargs)
