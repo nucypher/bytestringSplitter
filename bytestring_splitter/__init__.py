@@ -392,7 +392,7 @@ class HeaderMetaDataMixinBase:
     """
 
     def __call__(self, splittable, *args, **kwargs):
-        setattr(self, f'input_{self.METADATA_TAG}', kwargs.pop('self.METADATA_TAG', None))
+        setattr(self, f'input_{self.METADATA_TAG}', kwargs.pop(self.METADATA_TAG, None))
         splittable = self.strip_metadata(splittable)
         splitter = super().__call__(splittable, *args, **kwargs)
         return splitter
@@ -482,11 +482,11 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def _deserialize_metadata(cls, data_bytes):
-        raise NotImplementedError
+        return data_bytes
 
     @classmethod
     def _serialize_metadata(cls, data_bytes):
-        raise NotImplementedError
+        return data_bytes
 
 
 class VersioningMixin(HeaderMetaDataMixinBase):

@@ -305,7 +305,7 @@ class AddsDeadBeefMixin(HeaderMetaDataMixinBase):
 
     @classmethod
     def _serialize_metadata(cls, value):
-        return cls.funny_bytes_pun
+        return value or cls.funny_bytes_pun
 
 
 class AddsDeadBeefSplitter(AddsDeadBeefMixin, BytestringSplitter):
@@ -342,7 +342,7 @@ class AddsBadFooMixin(HeaderMetaDataMixinBase):
 
     @classmethod
     def _serialize_metadata(cls, value):
-        return cls.other_funny_bytes_pun
+        return value or cls.funny_bytes_pun
 
 
 class FeelDeadMixin(HeaderMetaDataMixinBase):
@@ -356,7 +356,7 @@ class FeelDeadMixin(HeaderMetaDataMixinBase):
 
     @classmethod
     def _serialize_metadata(cls, value):
-        return cls.how_i_feel
+        return value or cls.funny_bytes_pun
 
 
 class AddsAllMannerOfHeadersSplitter(FeelDeadMixin, AddsBadFooMixin, AddsDeadBeefMixin, BytestringSplitter):
@@ -381,6 +381,32 @@ def test_mixin_chain():
 
     assert metadata['funny_bytes_pun'] == 'deadbeef'
     assert metadata['other_funny_bytes_pun'] == 'baddf00'
+    assert metadata['how_i_feel'] == 'fee1dead'
+
+
+def test_mixin_chain_with_kwargs():
+    innocent_bytestring = b'i have no weird stuff in front of me.'
+
+    prepended = AddsAllMannerOfHeadersSplitter.assign_metadata(
+        innocent_bytestring,
+        funny_bytes_pun=b'facefeed',
+        other_funny_bytes_pun=b'feedc0d'
+    )
+    assert prepended.startswith(b'fee1deadfeedc0dfacefeed')
+
+    # now lets read this back out.
+    splitter = AddsAllMannerOfHeadersSplitter(
+        (str, 34, {"encoding": "utf-8"}),
+        (str, 3, {"encoding": "utf-8"}),
+    )
+
+    result = splitter(prepended)
+    assert result == ['i have no weird stuff in front of ', 'me.']
+
+    metadata = splitter.get_metadata(prepended)
+
+    assert metadata['funny_bytes_pun'] == 'facefeed'
+    assert metadata['other_funny_bytes_pun'] == 'feedc0d'
     assert metadata['how_i_feel'] == 'fee1dead'
 
 
