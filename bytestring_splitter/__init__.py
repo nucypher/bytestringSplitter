@@ -153,7 +153,6 @@ class BytestringSplitter(object):
             or raise an error if there is a remainder.
         :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
         """
-
         if not self.is_variable_length:
             if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
                 message = "Wrong number of bytes to constitute message types {} - need {}, got {} Did you mean to return the remainder?"
@@ -425,15 +424,14 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def assign_metadata(cls, some_bytes, **kwargs):
-        """
-        As a splitter derived from mixins descending from HeaderMetaDataMixinBase
-        we need to prepend all the headers for all ancestral mixins in a deterministic
-        order.
-        """
 
-        # get all ancestral mixins descending from the mixin base,
-        # not including the actual child splitter or the mixin baseclass
-        for kls in cls._get_ordered_mixin_chain(reversed=True):  # reverse the list ( or not? people can comment on this... )
+        for kls in cls._get_ordered_mixin_chain(reversed=True):
+
+            # if a splitter has class attributes that override
+            # a mixin's TAG, we should pass them in in the kwargs here
+            if hasattr(cls, kls.METADATA_TAG) and not kwargs.get(kls.METADATA_TAG):
+                kwargs[kls.METADATA_TAG] = getattr(cls, kls.METADATA_TAG)
+
             some_bytes = kls._assign_metadata(some_bytes, **kwargs)
 
         return some_bytes
