@@ -66,9 +66,6 @@ def test_just_in_time_attribute_resolution():
     cup_of_coffee = brewing_coffee.finish()
     assert cup_of_coffee.sip() == "Mmmm"
 
-"""
-VersionedBytestringSplitter Tests
-"""
 
 class CaffeinatedBeverage:
 

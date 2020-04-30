@@ -1,7 +1,8 @@
 import msgpack
 import pytest
 
-from bytestring_splitter import BytestringSplitter,  HeaderMetaDataMixinBase, VersioningMixin
+from bytestring_splitter import BytestringSplitter, HeaderMetaDataMixinBase, VersioningMixin, StructureChecksumMixin, \
+    VariableLengthBytestring
 
 
 class AddsDeadBeefMixin(HeaderMetaDataMixinBase):
@@ -148,3 +149,79 @@ def test_splitter_local_overrides():
     assert metadata['bed_food_bytes'] == 'deafc0d'
     assert metadata['current_feeling'] == 'f331600d'
     assert metadata['version'] == 666
+
+
+class ChecksumVerifyingSplitter(StructureChecksumMixin, BytestringSplitter):
+    pass
+
+
+def test_checksum_validation():
+
+    three_v_three_splitter = ChecksumVerifyingSplitter(
+        3,
+        VariableLengthBytestring,
+        3
+    )
+
+    five_v_six_splitter = ChecksumVerifyingSplitter(
+        5,
+        VariableLengthBytestring,
+        6
+    )
+
+    threevthree = three_v_three_splitter.assign_metadata(
+        b'bob' + VariableLengthBytestring(b' enjoys petting his ') + b'cat',
+        checksum=three_v_three_splitter.generate_checksum()
+    )
+    fivevsix = three_v_three_splitter.assign_metadata(
+        b'alice' + VariableLengthBytestring(b' recently adopted a ') + b'puppy',
+        checksum=five_v_six_splitter.generate_checksum()
+    )
+
+    assert three_v_three_splitter.validate_checksum(threevthree)
+    assert five_v_six_splitter.validate_checksum(fivevsix)
+
+    assert three_v_three_splitter.validate_checksum(fivevsix) is False
+    assert five_v_six_splitter.validate_checksum(threevthree) is False
+
+    threevthree_result = three_v_three_splitter(threevthree)
+    assert threevthree_result == [b'bob', b' enjoys petting his ', b'cat']
+
+    fivevsix_result = five_v_six_splitter(fivevsix)
+    assert fivevsix_result == [b'alice', b' recently adopted a ', b'puppy']
+
+
+def test_checksum_exception():
+
+    attack_splitter = ChecksumVerifyingSplitter(
+        3,
+        1,
+        3,
+        1,
+        5
+    )
+
+    revenge_splitter = ChecksumVerifyingSplitter(
+        5,
+        1,
+        7,
+        1,
+        3
+    )
+
+    attack_bytes = attack_splitter.render(b'bob hit alice')
+    revenge_bytes = revenge_splitter.render(b'alice smacked bob')
+
+    assert attack_splitter.validate_checksum(revenge_bytes) is False
+    with pytest.raises(ChecksumVerifyingSplitter.InvalidBytestringException):
+        attack_splitter.validate_checksum(revenge_bytes, raise_exception=True)
+
+    assert revenge_splitter.validate_checksum(attack_bytes) is False
+
+    with pytest.raises(ChecksumVerifyingSplitter.InvalidBytestringException) as exception:
+        revenge_splitter.validate_checksum(attack_bytes, raise_exception=True)
+    assert str(exception.value).endswith('expected signature which is: bytes: (5), bytes: (1), bytes: (7), bytes: (1), bytes: (3)')
+
+    # lets make sure they validate when given the correct bytes
+    assert revenge_splitter.validate_checksum(revenge_bytes)
+    assert attack_splitter.validate_checksum(attack_bytes)

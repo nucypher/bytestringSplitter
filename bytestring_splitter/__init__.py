@@ -1,5 +1,5 @@
 from collections import namedtuple
-
+import hashlib
 from bytestring_splitter.__about__ import __author__, __summary__, __title__, __version__
 
 __all__ = ["__title__", "__summary__", "__version__", "__author__", ]
@@ -391,7 +391,7 @@ class HeaderMetaDataMixinBase:
         return splitter
 
     @classmethod
-    def _get_ordered_mixin_chain(cls, reversed=False):
+    def _get_ordered_mixins(cls, reversed=False):
         """
         returns mixins inheriting from HeaderMetaDataMixinBase in MRO order
         for the purpose of removing or adding bytes in the correct order
@@ -424,10 +424,21 @@ class HeaderMetaDataMixinBase:
         """
 
         data = {}
-        for subclass in cls._get_ordered_mixin_chain():
+        for subclass in cls._get_ordered_mixins():
             data.update(subclass._get_metadata(some_bytes, **kwargs))
             some_bytes = subclass._strip_metadata(some_bytes)
         return data
+
+    def render(self, some_bytes, **kwargs):
+        """
+        A shortcut which allows a BytestringSplitter instance to attempt to
+        autogenerate all needed input for bytestring serialization if possible
+        """
+        for subclass in self._get_ordered_mixins():
+            if not kwargs.get(subclass.METADATA_TAG):
+                if hasattr(subclass, f'generate_{subclass.METADATA_TAG}'):
+                    kwargs[subclass.METADATA_TAG] = getattr(subclass, f'generate_{subclass.METADATA_TAG}')(self, some_bytes)
+        return self.assign_metadata(some_bytes, **kwargs)
 
     @classmethod
     def assign_metadata(cls, some_bytes, **kwargs):
@@ -435,7 +446,7 @@ class HeaderMetaDataMixinBase:
         prepends the metadata bytes to the supplied bytestring for all mixins in the chain
         """
 
-        for subclass in cls._get_ordered_mixin_chain(reversed=True):
+        for subclass in cls._get_ordered_mixins(reversed=True):
 
             # if a splitter has class attributes that override
             # a mixin's TAG, we should pass them in in the kwargs here
@@ -454,7 +465,7 @@ class HeaderMetaDataMixinBase:
         exact bytes of metadata, it only promises to remove the correct _number_ of bytes, which
         in conjunction with all its siblings, will result in full metadata strippage
         """
-        for subcls in cls._get_ordered_mixin_chain():
+        for subcls in cls._get_ordered_mixins():
             some_bytes = subcls._strip_metadata(some_bytes)
         return some_bytes
 
@@ -487,6 +498,9 @@ class HeaderMetaDataMixinBase:
         data[cls.METADATA_TAG] = cls._deserialize_metadata(data_bytes)
 
         return data
+
+    def get_header_bytes(self, some_bytes):
+        return self._get_metadata(some_bytes)[self.METADATA_TAG]
 
     @classmethod
     def _deserialize_metadata(cls, data_bytes):
@@ -534,13 +548,24 @@ class StructureChecksumMixin(HeaderMetaDataMixinBase):
     HEADER_LENGTH = 4
     METADATA_TAG = 'checksum'
 
-    @classmethod
-    def _deserialize_metadata(cls, data_bytes):
-        return data_bytes.decode('ascii')
+    class InvalidBytestringException(BaseException):
+        pass
 
-    @classmethod
-    def _serialize_metadata(cls, value):
-        return b'dave'
+    def generate_checksum(self, *args, **kwargs):
+        hash = hashlib.sha256()
+        for mt in self.message_types:
+            message_name, message_class, message_length, kwargs = mt
+            hash.update(
+                b'v' if message_length is VariableLengthBytestring
+                else message_length.to_bytes(VARIABLE_HEADER_LENGTH, "big"))
+        return hash.digest()[:StructureChecksumMixin.HEADER_LENGTH]
+
+    def validate_checksum(self, some_bytes, raise_exception=False):
+        result = self.generate_checksum() == self.get_header_bytes(some_bytes)
+        if result is False and raise_exception:
+            expected = ', '.join([f'{message_class.__name__}: ({message_length})' for message_name, message_class, message_length, kwargs in self.message_types])
+            raise StructureChecksumMixin.InvalidBytestringException(f"The contents of this bytestring could not be validated to match the expected signature which is: {expected}")
+        return result
 
 
 class VersionedBytestringSplitter(VersioningMixin, BytestringSplitter):

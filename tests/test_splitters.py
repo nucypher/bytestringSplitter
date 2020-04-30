@@ -224,4 +224,3 @@ def test_bundle_and_dispense_variable_length():
     vbytes = bytes(VariableLengthBytestring.bundle(items))
     items_again = VariableLengthBytestring.dispense(vbytes)
     assert items == items_again
-
