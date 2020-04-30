@@ -349,16 +349,12 @@ class BytestringKwargifier(BytestringSplitter):
     partial_receiver = PartiallyKwargifiedBytes
     __splitterbaseclass = BytestringSplitter
 
-    @classmethod
-    def _baseclass(cls):
-        return cls.__splitterbaseclass
-
     def __init__(self, _receiver=None, _partial_receiver=None, _additional_kwargs=None, **parameter_pairs):
         self.receiver = _receiver
         if _partial_receiver is not None:
             self.partial_receiver = _partial_receiver
         self._additional_kwargs = _additional_kwargs or {}
-        self._baseclass().__init__(self, *parameter_pairs.items())
+        self.__splitterbaseclass.__init__(self, *parameter_pairs.items())
 
     def __call__(self, splittable, receiver=None, partial=False, *args, **kwargs):
         receiver = receiver or self.receiver
@@ -367,7 +363,7 @@ class BytestringKwargifier(BytestringSplitter):
             raise TypeError(
                 "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
 
-        result = self._baseclass().__call__(self, splittable, partial=partial, *args, **kwargs)
+        result = self.__splitterbaseclass.__call__(self, splittable, partial=partial, *args, **kwargs)
         if partial:
             result.set_receiver(receiver)
             result.set_additional_kwargs(self._additional_kwargs)
@@ -533,12 +529,6 @@ class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwarg
     def __init__(self, *args, **kwargs):
         self._input_version = kwargs.pop('version')
         super().__init__(*args, **kwargs)
-
-    @staticmethod
-    def _parse_message_meta(message_item):
-        message_name, message_type = message_item
-        _, message_class, message_length, kwargs = VersionedBytestringSplitter._parse_message_meta(message_type)
-        return VersionedBytestringSplitter.Message(message_name, message_class, message_length, kwargs)
 
 
 class VariableLengthBytestring:
