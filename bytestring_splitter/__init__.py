@@ -381,9 +381,8 @@ class BytestringKwargifier(BytestringSplitter):
 
 class HeaderMetaDataMixinBase:
     """
-    Prepend 'version' bytes onto the beginning of this bytestring at serialization time.
-    When deserializing, use these bytes to provide information to consuming code about what
-    version of the bytes in question these are.  Implementer to decide how knowing this is useful.
+    A baseclass for mixins that work by serializing metadata about a bytestring by adding bytes to the
+    start of said bytestring and deserialize that data at other times by removing those same bytes.
     """
 
     def __call__(self, splittable, *args, **kwargs):
@@ -394,6 +393,11 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def _get_ordered_mixin_chain(cls, reversed=False):
+        """
+        returns mixins inheriting from HeaderMetaDataMixinBase in MRO order
+        for the purpose of removing or adding bytes in the correct order
+        """
+
         mixins = [
             kls for kls in cls.__mro__ if
             issubclass(kls, HeaderMetaDataMixinBase)
@@ -402,6 +406,7 @@ class HeaderMetaDataMixinBase:
             is not cls
             ]
 
+        # if an implementer creates a splitter by directly subclassing this baseclass and BytestringSplitter
         if not mixins and (issubclass(cls, HeaderMetaDataMixinBase) and cls not in mixins):
             mixins.append(cls)
 
@@ -411,6 +416,10 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def get_metadata(cls, some_bytes, **kwargs):
+        """
+        return a dictionary of the metadata from the beginning of the supplied bytestring
+        where the keys are the HEADER_TAGs of any mixins in the MRO chain
+        """
 
         data = {}
         for subclass in cls._get_ordered_mixin_chain():
@@ -420,6 +429,9 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def assign_metadata(cls, some_bytes, **kwargs):
+        """
+        prepends the metadata bytes to the supplied bytestring for all mixins in the chain
+        """
 
         for kls in cls._get_ordered_mixin_chain(reversed=True):
 
@@ -446,6 +458,9 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def _assign_metadata(cls, some_bytes, **kwargs):
+        """
+        called by the baseclass for all subclasses for them to add their own metadata
+        """
         data = kwargs.get(cls.METADATA_TAG, None) or\
             getattr(cls, f'_input_{cls.METADATA_TAG}', None) or\
             getattr(cls, cls.METADATA_TAG, None)
@@ -464,10 +479,7 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def _get_metadata(cls, some_bytes, data=None):
-        """
-        Assuming multiple mixins, we want to call this on the whole inheritance chain and
-        reduce all the contributions into a single dictionary.
-        """
+        # gets the metadata off the top of the bytestring for this mixin
         data = data or {}
         data_bytes = some_bytes[:cls.HEADER_LENGTH]
         data[cls.METADATA_TAG] = cls._deserialize_metadata(data_bytes)
@@ -476,10 +488,23 @@ class HeaderMetaDataMixinBase:
 
     @classmethod
     def _deserialize_metadata(cls, data_bytes):
+        """
+        will often be overridden to transform metadata as needed
+        for a given type of metadata
+
+        see VersioningMixin below
+        """
+
         return data_bytes
 
     @classmethod
     def _serialize_metadata(cls, data_bytes):
+        """
+        will often be overridden to transform metadata as needed
+        for a given type of metadata
+
+        see VersioningMixin below
+        """
         return data_bytes
 
 
