@@ -355,6 +355,7 @@ class FeelingsMixin(HeaderMetaDataMixinBase):
 class AddsAllMannerOfHeadersSplitter(VersioningMixin, FeelingsMixin, AddsBadFoodMixin, AddsDeadBeefMixin, BytestringSplitter):
     pass
 
+
 def test_mixin_chain():
     innocent_bytestring = b'i have no weird stuff in front of me.'
 
@@ -381,34 +382,6 @@ def test_mixin_chain():
     assert metadata['funny_bytes_pun'] == 'deadbeef'
     assert metadata['bad_food_bytes'] == '01dbeef'
     assert metadata['current_feeling'] == 'fee1dead'
-
-
-class LocalOverridesSplitter(VersioningMixin, FeelingsMixin, AddsBadFoodMixin, AddsDeadBeefMixin, BytestringSplitter):
-    version = 666
-    funny_bytes_pun = b'beefdead'
-    current_feeling = b'f331600d'
-    bad_food_bytes = b'deadc0d'
-
-
-def test_splitter_local_overrides():
-    innocent_bytestring = b'i have no weird stuff in front of me.'
-    prepended = LocalOverridesSplitter.assign_metadata(innocent_bytestring)
-    assert prepended == b'\x02\x9a' +b'f331600d' + b'deadc0d' + b'beefdead' + b'i have no weird stuff in front of me.'
-
-    splitter = LocalOverridesSplitter(
-        (str, 34, {"encoding": "utf-8"}),
-        (str, 3, {"encoding": "utf-8"}),
-    )
-
-    result = splitter(prepended)
-    assert result == ['i have no weird stuff in front of ', 'me.']
-
-    metadata = splitter.get_metadata(prepended)
-
-    assert metadata['funny_bytes_pun'] == 'beefdead'
-    assert metadata['bad_food_bytes'] == 'deadc0d'
-    assert metadata['current_feeling'] == 'f331600d'
-    assert metadata['version'] == 666
 
 
 def test_mixin_chain_with_kwargs():
@@ -439,10 +412,37 @@ def test_mixin_chain_with_kwargs():
     assert metadata['version'] == 5
 
 
+class LocalOverridesSplitter(VersioningMixin, FeelingsMixin, AddsBadFoodMixin, AddsDeadBeefMixin, BytestringSplitter):
+    version = 666
+    funny_bytes_pun = b'beefdead'
+    current_feeling = b'f331600d'
+    bad_food_bytes = b'deadc0d'
+
+
+def test_splitter_local_overrides():
+    innocent_bytestring = b'i have no weird stuff in front of me.'
+    prepended = LocalOverridesSplitter.assign_metadata(innocent_bytestring)
+    assert prepended == b'\x02\x9a' +b'f331600d' + b'deadc0d' + b'beefdead' + b'i have no weird stuff in front of me.'
+
+    splitter = LocalOverridesSplitter(
+        (str, 34, {"encoding": "utf-8"}),
+        (str, 3, {"encoding": "utf-8"}),
+    )
+
+    result = splitter(prepended)
+    assert result == ['i have no weird stuff in front of ', 'me.']
+
+    metadata = splitter.get_metadata(prepended)
+
+    assert metadata['funny_bytes_pun'] == 'beefdead'
+    assert metadata['bad_food_bytes'] == 'deadc0d'
+    assert metadata['current_feeling'] == 'f331600d'
+    assert metadata['version'] == 666
+
+
 """
 VersionedBytestringSplitter Tests
 """
-
 
 class CaffeinatedBeverage:
 
