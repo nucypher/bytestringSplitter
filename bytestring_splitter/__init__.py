@@ -384,31 +384,78 @@ class BytestringKwargifier(BytestringSplitter):
         return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
 
 
-class HeaderMetaDataMixinBase(BytestringSplitter):
+class HeaderMetaDataMixinBase:
     """
     Prepend 'version' bytes onto the beginning of this bytestring at serialization time.
     When deserializing, use these bytes to provide information to consuming code about what
     version of the bytes in question these are.  Implementer to decide how knowing this is useful.
     """
 
-    def __len__(self):
-        """ Version bytes are always removed prior to any mechanics of bytestringsplitters,
-        so we need to add our version header length back on since these bytes will never
-        be present during normal activities"""
-        return super().__len__() + self.HEADER_LENGTH
-
     def __call__(self, splittable, *args, **kwargs):
-        splittable = self._remove_metadata(splittable)
+        setattr(self, f'input_{self.METADATA_TAG}', kwargs.pop('self.METADATA_TAG', None))
+        splittable = self.strip_metadata(splittable)
         splitter = super().__call__(splittable, *args, **kwargs)
         return splitter
 
     @classmethod
-    def assign_metadata(cls, klass, some_bytes, value=None):
+    def _get_ordered_mixin_chain(cls, reversed=False):
+        mixins = [
+            kls for kls in cls.__mro__ if
+            issubclass(kls, HeaderMetaDataMixinBase)
+            and not issubclass(kls, BytestringSplitter) and kls
+            is not HeaderMetaDataMixinBase and kls
+            is not cls
+            ]
+
+        if not mixins and (issubclass(cls, HeaderMetaDataMixinBase) and cls not in mixins):
+            mixins.append(cls)
+
+        if reversed:
+            return mixins[::-1]
+        return mixins
+
+    @classmethod
+    def get_metadata(cls, some_bytes, **kwargs):
+
+        data = {}
+        for subclass in cls._get_ordered_mixin_chain():
+            data.update(subclass._get_metadata(some_bytes, **kwargs))
+            some_bytes = subclass._strip_metadata(some_bytes)
+        return data
+
+    @classmethod
+    def assign_metadata(cls, some_bytes, **kwargs):
         """
-        If value is not supplied, try getting it from the class that is serializing itself
-        or maybe that thing's bytestringsplitter?
+        As a splitter derived from mixins descending from HeaderMetaDataMixinBase
+        we need to prepend all the headers for all ancestral mixins in a deterministic
+        order.
         """
-        data = value or getattr(klass, cls.METADATA_TAG, None) or getattr(cls, f'_input_{cls.METADATA_TAG}', None)
+
+        # get all ancestral mixins descending from the mixin base,
+        # not including the actual child splitter or the mixin baseclass
+        for kls in cls._get_ordered_mixin_chain(reversed=True):  # reverse the list ( or not? people can comment on this... )
+            some_bytes = kls._assign_metadata(some_bytes, **kwargs)
+
+        return some_bytes
+        return cls._assign_metadata(some_bytes, **kwargs)
+
+    @classmethod
+    def strip_metadata(cls, some_bytes):
+        """
+        Slightly dirty... in a chain of mixins, this doesn't guarantee to remove it's _own_
+        exact bytes of metadata, it only promises to remove the correct _number_ of bytes, which
+        in conjunction with all its siblings, will result in full metadata strippage
+        """
+        for subcls in cls._get_ordered_mixin_chain():
+            some_bytes = subcls._strip_metadata(some_bytes)
+        return some_bytes
+
+    @classmethod
+    def _assign_metadata(cls, some_bytes, **kwargs):
+        data = kwargs.get(cls.METADATA_TAG, None) or\
+            getattr(cls, f'_input_{cls.METADATA_TAG}', None) or\
+            getattr(cls, cls.METADATA_TAG, None)
+
         if not data:
             raise ValueError(f"could not determine {cls.METADATA_TAG} to assign to output bytes and none was supplied")
         return cls._prepend_metadata(cls._serialize_metadata(data), some_bytes)
@@ -417,17 +464,17 @@ class HeaderMetaDataMixinBase(BytestringSplitter):
     def _prepend_metadata(cls, data, some_bytes):
         return data + some_bytes
 
-    def _remove_metadata(self, some_bytes):
+    @classmethod
+    def _strip_metadata(self, some_bytes):
         return some_bytes[self.HEADER_LENGTH:]
 
     @classmethod
-    def get_metadata(cls, some_bytes):
-
-        try:
-            data = super().get_metadata(some_bytes)
-        except AttributeError:
-            data = {}
-
+    def _get_metadata(cls, some_bytes, data=None):
+        """
+        Assuming multiple mixins, we want to call this on the whole inheritance chain and
+        reduce all the contributions into a single dictionary.
+        """
+        data = data or {}
         data_bytes = some_bytes[:cls.HEADER_LENGTH]
         data[cls.METADATA_TAG] = cls._deserialize_metadata(data_bytes)
 
@@ -454,6 +501,25 @@ class VersioningMixin(HeaderMetaDataMixinBase):
     @classmethod
     def _serialize_metadata(cls, value):
         return value.to_bytes(cls.HEADER_LENGTH, "big")
+
+    @classmethod
+    def assign_version(cls, some_bytes, version):
+        #  a convenience method specific to VersioningMixin
+        return cls.assign_metadata(some_bytes, version=version)
+
+
+class StructureChecksumMixin(HeaderMetaDataMixinBase):
+
+    HEADER_LENGTH = 4
+    METADATA_TAG = 'checksum'
+
+    @classmethod
+    def _deserialize_metadata(cls, data_bytes):
+        return data_bytes.decode('ascii')
+
+    @classmethod
+    def _serialize_metadata(cls, value):
+        return b'dave'
 
 
 class VersionedBytestringSplitter(VersioningMixin, BytestringSplitter):

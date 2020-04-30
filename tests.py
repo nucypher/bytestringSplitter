@@ -2,7 +2,7 @@ import msgpack
 import pytest
 
 from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringKwargifier, \
-    BytestringSplittingError, VersionedBytestringSplitter, VersionedBytestringKwargifier
+    BytestringSplittingError, VersionedBytestringSplitter, VersionedBytestringKwargifier, HeaderMetaDataMixinBase
 
 
 def test_splitting_one_message():
@@ -289,7 +289,104 @@ def test_just_in_time_attribute_resolution():
     cup_of_coffee = brewing_coffee.finish()
     assert cup_of_coffee.sip() == "Mmmm"
 
+"""
+MIXIN Tests
+"""
+class AddsDeadBeefMixin(HeaderMetaDataMixinBase):
 
+    METADATA_TAG = 'funny_bytes_pun'
+    HEADER_LENGTH = 8
+
+    funny_bytes_pun = b'deadbeef'
+
+    @classmethod
+    def _deserialize_metadata(cls, data_bytes):
+        return data_bytes.decode('ascii')
+
+    @classmethod
+    def _serialize_metadata(cls, value):
+        return cls.funny_bytes_pun
+
+
+class AddsDeadBeefSplitter(AddsDeadBeefMixin, BytestringSplitter):
+    pass
+
+
+def test_that_it_addsdeadbeef():
+    bytestring = b"hello world"
+    with_metadata = AddsDeadBeefSplitter.assign_metadata(bytestring)
+    assert with_metadata.startswith(b'deadbeef')
+
+
+def test_deadbeefparsing():
+    bytestring = b"deadbeefhello world"
+    splitter = AddsDeadBeefSplitter(
+        (str, 5, {"encoding": "utf-8"}),
+        (str, 1, {"encoding": "utf-8"}),
+        (str, 5, {"encoding": "utf-8"}))
+
+    result = splitter(bytestring)
+    assert result == ["hello", " ", "world"]
+    assert splitter.funny_bytes_pun == b'deadbeef'
+    assert splitter.get_metadata(bytestring)['funny_bytes_pun'] == 'deadbeef' # as utf-8
+
+
+class AddsBadFooMixin(HeaderMetaDataMixinBase):
+    METADATA_TAG = 'other_funny_bytes_pun'
+    other_funny_bytes_pun = b'baddf00'
+    HEADER_LENGTH = 7
+
+    @classmethod
+    def _deserialize_metadata(cls, data_bytes):
+        return data_bytes.decode('ascii')
+
+    @classmethod
+    def _serialize_metadata(cls, value):
+        return cls.other_funny_bytes_pun
+
+
+class FeelDeadMixin(HeaderMetaDataMixinBase):
+    METADATA_TAG = 'how_i_feel'
+    how_i_feel = b'fee1dead'
+    HEADER_LENGTH = 8
+
+    @classmethod
+    def _deserialize_metadata(cls, data_bytes):
+        return data_bytes.decode('ascii')
+
+    @classmethod
+    def _serialize_metadata(cls, value):
+        return cls.how_i_feel
+
+
+class AddsAllMannerOfHeadersSplitter(FeelDeadMixin, AddsBadFooMixin, AddsDeadBeefMixin, BytestringSplitter):
+    pass
+
+
+def test_mixin_chain():
+    innocent_bytestring = b'i have no weird stuff in front of me.'
+
+    prepended = AddsAllMannerOfHeadersSplitter.assign_metadata(innocent_bytestring)
+    assert prepended.startswith(b'fee1deadbaddf00deadbeef')
+
+    # now lets read this back out.
+    splitter = AddsAllMannerOfHeadersSplitter(
+        (str, 34, {"encoding": "utf-8"}),
+        (str, 3, {"encoding": "utf-8"}))
+
+    result = splitter(prepended)
+    assert result == ['i have no weird stuff in front of ', 'me.']
+
+    metadata = splitter.get_metadata(prepended)
+
+    assert metadata['funny_bytes_pun'] == 'deadbeef'
+    assert metadata['other_funny_bytes_pun'] == 'baddf00'
+    assert metadata['how_i_feel'] == 'fee1dead'
+
+
+"""
+VersionedBytestringSplitter Tests
+"""
 class CaffeinatedBeverage:
 
     def __bytes__(self):
@@ -344,7 +441,7 @@ class BeverageFactory:
 
     @staticmethod
     def add_version(instance, instance_bytes):
-        return BeverageFactory.splitters[instance.version - 1].assign_metadata(instance, instance_bytes)
+        return BeverageFactory.splitters[instance.version - 1].assign_version(instance_bytes, instance.version)
 
 
 def test_instantiate_from_versionedbytes():
@@ -371,3 +468,4 @@ def test_versioned_instances_to_bytes():
     # one more round trip just to me certain
     assert isinstance(BeverageFactory.from_bytes(bytes(coffee)), OldFashionedCoffee)
     assert isinstance(BeverageFactory.from_bytes(bytes(energy)), EnergyDrink)
+
