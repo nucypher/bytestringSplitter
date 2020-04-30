@@ -406,7 +406,7 @@ class HeaderMetaDataMixinBase:
             ]
 
         # if an implementer creates a splitter by directly subclassing this baseclass and BytestringSplitter
-        if not mixins and (issubclass(cls, HeaderMetaDataMixinBase) and cls not in mixins):
+        if not mixins and issubclass(cls, HeaderMetaDataMixinBase):
             mixins.append(cls)
 
         if reversed:
