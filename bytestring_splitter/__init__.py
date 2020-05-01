@@ -396,7 +396,7 @@ class HeaderMetaDataMixinBase:
         returns mixins inheriting from HeaderMetaDataMixinBase in MRO order
         for the purpose of removing or adding bytes in the correct order
 
-        This allows for metadata to be added and removed from the bytestsring in the
+        This allows for metadata to be added and removed from the bytestring in the
         same order that the mixins are declared in the class definition.
         """
 
