@@ -264,7 +264,6 @@ def test_checksum_collision():
 @pytest.mark.skip()
 def test_hash_function_speed():
 
-    ChecksumVerifyingSplitter.HASH_FUNCTION = 'md5'
     hd_movie_splitter = ChecksumVerifyingSplitter(
         (bytes, 1987475062)
     )
