@@ -244,6 +244,7 @@ def test_checksum_exception():
     assert revenge_splitter.validate_checksum(revenge_bytes)
     assert attack_splitter.validate_checksum(attack_bytes)
 
+
 def test_checksum_collision():
     # thx dnunez
 
@@ -259,3 +260,15 @@ def test_checksum_collision():
     )
 
     assert four_variables_splitter.generate_checksum() != hd_movie_splitter.generate_checksum()
+
+@pytest.mark.skip()
+def test_hash_function_speed():
+
+    ChecksumVerifyingSplitter.HASH_FUNCTION = 'md5'
+    hd_movie_splitter = ChecksumVerifyingSplitter(
+        (bytes, 1987475062)
+    )
+
+    for i in range(2000 * 5000):
+        hd_movie_splitter.generate_checksum()
+

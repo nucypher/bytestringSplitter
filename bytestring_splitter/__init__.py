@@ -547,12 +547,13 @@ class StructureChecksumMixin(HeaderMetaDataMixinBase):
 
     HEADER_LENGTH = 4
     METADATA_TAG = 'checksum'
+    HASH_FUNCTION = 'md5'
 
     class InvalidBytestringException(BaseException):
         pass
 
     def generate_checksum(self, *args, **kwargs):
-        hash = hashlib.sha256()
+        hash = getattr(hashlib, self.HASH_FUNCTION)()
         for mt in self.message_types:
             message_name, message_class, message_length, kwargs = mt
             hash.update(
