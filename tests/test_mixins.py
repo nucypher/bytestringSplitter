@@ -243,3 +243,19 @@ def test_checksum_exception():
     # lets make sure they validate when given the correct bytes
     assert revenge_splitter.validate_checksum(revenge_bytes)
     assert attack_splitter.validate_checksum(attack_bytes)
+
+def test_checksum_collision():
+    # thx dnunez
+
+    four_variables_splitter = ChecksumVerifyingSplitter(
+        VariableLengthBytestring,
+        VariableLengthBytestring,
+        VariableLengthBytestring,
+        VariableLengthBytestring,
+    )
+
+    hd_movie_splitter = ChecksumVerifyingSplitter(
+        (bytes, 1987475062)
+    )
+
+    assert four_variables_splitter.generate_checksum() != hd_movie_splitter.generate_checksum()
