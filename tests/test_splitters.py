@@ -1,9 +1,7 @@
 import msgpack
 import pytest
 
-from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringKwargifier, \
-    BytestringSplittingError, VersionedBytestringSplitter, VersionedBytestringKwargifier, HeaderMetaDataMixinBase, \
-    VersioningMixin
+from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringSplittingError
 
 
 def test_splitting_one_message():
