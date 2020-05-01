@@ -40,7 +40,7 @@ base_test_steps: &base_test_steps
           key: v2-dependencies-{{ checksum "Pipfile.lock" }}
       - run:
           name: Run Tests
-          command: pipenv run pytest tests.py --cov=. --cov-report=html  --junitxml=./reports/pytest/results.xml
+          command: pipenv run pytest tests --cov=. --cov-report=html  --junitxml=./reports/pytest/results.xml
       - store_artifacts:
           path: ./htmlcov
       - store_test_results:

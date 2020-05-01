@@ -1,5 +1,5 @@
 from collections import namedtuple
-
+import hashlib
 from bytestring_splitter.__about__ import __author__, __summary__, __title__, __version__
 
 __all__ = ["__title__", "__summary__", "__version__", "__author__", ]
@@ -106,7 +106,7 @@ def produce_value(message_class, message_name, bytes_for_this_object, kwargs):
     return value
 
 
-class BytestringSplitter(object):
+class BytestringSplitter:
     Message = namedtuple("Message", ("name", "message_class", "length", "kwargs"))
     processed_objects_container = list
     partial_receiver = PartiallySplitBytes
@@ -153,7 +153,6 @@ class BytestringSplitter(object):
             or raise an error if there is a remainder.
         :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
         """
-
         if not self.is_variable_length:
             if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
                 message = "Wrong number of bytes to constitute message types {} - need {}, got {} Did you mean to return the remainder?"
@@ -292,8 +291,8 @@ class BytestringSplitter(object):
                 # If not, we expect it to be a method on the first item.
                 message_length = message_class.expected_bytes_length()
         except AttributeError:
-            raise TypeError("""No way to know the expected length.  
-                Either pass it as the second member of a tuple or 
+            raise TypeError("""No way to know the expected length.
+                Either pass it as the second member of a tuple or
                 set _EXPECTED_LENGTH on the class you're passing.""")
 
         try:
@@ -354,7 +353,7 @@ class BytestringKwargifier(BytestringSplitter):
         if _partial_receiver is not None:
             self.partial_receiver = _partial_receiver
         self._additional_kwargs = _additional_kwargs or {}
-        BytestringSplitter.__init__(self, *parameter_pairs.items())
+        super().__init__(*parameter_pairs.items())
 
     def __call__(self, splittable, receiver=None, partial=False, *args, **kwargs):
         receiver = receiver or self.receiver
@@ -363,7 +362,7 @@ class BytestringKwargifier(BytestringSplitter):
             raise TypeError(
                 "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
 
-        result = BytestringSplitter.__call__(self, splittable, partial=partial, *args, **kwargs)
+        result = super().__call__(splittable, partial=partial, *args, **kwargs)
         if partial:
             result.set_receiver(receiver)
             result.set_additional_kwargs(self._additional_kwargs)
@@ -377,6 +376,211 @@ class BytestringKwargifier(BytestringSplitter):
         message_name, message_type = message_item
         _, message_class, message_length, kwargs = BytestringSplitter._parse_message_meta(message_type)
         return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
+
+
+class HeaderMetaDataMixinBase:
+    """
+    A baseclass for mixins that work by serializing metadata about a bytestring by adding bytes to the
+    start of said bytestring and deserialize that data at other times by removing those same bytes.
+    """
+
+    def __call__(self, splittable, *args, **kwargs):
+        setattr(self, f'input_{self.METADATA_TAG}', kwargs.pop(self.METADATA_TAG, None))
+        splittable = self.strip_metadata(splittable)
+        splitter = super().__call__(splittable, *args, **kwargs)
+        return splitter
+
+    @classmethod
+    def _get_ordered_mixins(cls, reversed=False):
+        """
+        returns mixins inheriting from HeaderMetaDataMixinBase in MRO order
+        for the purpose of removing or adding bytes in the correct order
+
+        This allows for metadata to be added and removed from the bytestring in the
+        same order that the mixins are declared in the class definition.
+        """
+
+        mixins = [
+            subclass for subclass in cls.__mro__ if
+            issubclass(subclass, HeaderMetaDataMixinBase)
+            and not issubclass(subclass, BytestringSplitter)
+            and subclass is not HeaderMetaDataMixinBase
+            and subclass is not cls
+            ]
+
+        # if an implementer creates a splitter by directly subclassing this baseclass and BytestringSplitter
+        if not mixins and issubclass(cls, HeaderMetaDataMixinBase):
+            mixins.append(cls)
+
+        if reversed:
+            return mixins[::-1]
+        return mixins
+
+    @classmethod
+    def get_metadata(cls, some_bytes, **kwargs):
+        """
+        return a dictionary of the metadata from the beginning of the supplied bytestring
+        where the keys are the HEADER_TAGs of any mixins in the MRO chain
+        """
+
+        data = {}
+        for subclass in cls._get_ordered_mixins():
+            data.update(subclass._get_metadata(some_bytes, **kwargs))
+            some_bytes = subclass._strip_metadata(some_bytes)
+        return data
+
+    def render(self, some_bytes, **kwargs):
+        """
+        A shortcut which allows a BytestringSplitter instance to attempt to
+        autogenerate all needed input for bytestring serialization if possible
+        """
+        for subclass in self._get_ordered_mixins():
+            if not kwargs.get(subclass.METADATA_TAG):
+                if hasattr(subclass, f'generate_{subclass.METADATA_TAG}'):
+                    kwargs[subclass.METADATA_TAG] = getattr(subclass, f'generate_{subclass.METADATA_TAG}')(self, some_bytes)
+        return self.assign_metadata(some_bytes, **kwargs)
+
+    @classmethod
+    def assign_metadata(cls, some_bytes, **kwargs):
+        """
+        prepends the metadata bytes to the supplied bytestring for all mixins in the chain
+        """
+
+        for subclass in cls._get_ordered_mixins(reversed=True):
+
+            # if a splitter has class attributes that override
+            # a mixin's TAG, we should pass them in in the kwargs here
+            if hasattr(cls, subclass.METADATA_TAG) and not kwargs.get(subclass.METADATA_TAG):
+                kwargs[subclass.METADATA_TAG] = getattr(cls, subclass.METADATA_TAG)
+
+            some_bytes = subclass._assign_metadata(some_bytes, **kwargs)
+
+        return some_bytes
+        return cls._assign_metadata(some_bytes, **kwargs)
+
+    @classmethod
+    def strip_metadata(cls, some_bytes):
+        """
+        Slightly dirty... in a chain of mixins, this doesn't guarantee to remove it's _own_
+        exact bytes of metadata, it only promises to remove the correct _number_ of bytes, which
+        in conjunction with all its siblings, will result in full metadata strippage
+        """
+        for subcls in cls._get_ordered_mixins():
+            some_bytes = subcls._strip_metadata(some_bytes)
+        return some_bytes
+
+    @classmethod
+    def _assign_metadata(cls, some_bytes, **kwargs):
+        """
+        called by the baseclass for all subclasses for them to add their own metadata
+        """
+        data = kwargs.get(cls.METADATA_TAG, None) or\
+            getattr(cls, f'_input_{cls.METADATA_TAG}', None) or\
+            getattr(cls, cls.METADATA_TAG, None)
+
+        if not data:
+            raise ValueError(f"could not determine {cls.METADATA_TAG} to assign to output bytes and none was supplied")
+        return cls._prepend_metadata(cls._serialize_metadata(data), some_bytes)
+
+    @classmethod
+    def _prepend_metadata(cls, data, some_bytes):
+        return data + some_bytes
+
+    @classmethod
+    def _strip_metadata(self, some_bytes):
+        return some_bytes[self.HEADER_LENGTH:]
+
+    @classmethod
+    def _get_metadata(cls, some_bytes, data=None):
+        # gets the metadata off the top of the bytestring for this mixin
+        data = data or {}
+        data_bytes = some_bytes[:cls.HEADER_LENGTH]
+        data[cls.METADATA_TAG] = cls._deserialize_metadata(data_bytes)
+
+        return data
+
+    def get_header_bytes(self, some_bytes):
+        return self._get_metadata(some_bytes)[self.METADATA_TAG]
+
+    @classmethod
+    def _deserialize_metadata(cls, data_bytes):
+        """
+        will often be overridden to transform metadata as needed
+        for a given type of metadata
+
+        see VersioningMixin below
+        """
+
+        return data_bytes
+
+    @classmethod
+    def _serialize_metadata(cls, data_bytes):
+        """
+        will often be overridden to transform metadata as needed
+        for a given type of metadata
+
+        see VersioningMixin below
+        """
+        return data_bytes
+
+
+class VersioningMixin(HeaderMetaDataMixinBase):
+
+    HEADER_LENGTH = 2
+    METADATA_TAG = 'version'
+
+    @classmethod
+    def _deserialize_metadata(cls, data_bytes):
+        return int.from_bytes(data_bytes, 'big')
+
+    @classmethod
+    def _serialize_metadata(cls, value):
+        return value.to_bytes(cls.HEADER_LENGTH, "big")
+
+    @classmethod
+    def assign_version(cls, some_bytes, version):
+        #  a convenience method specific to VersioningMixin
+        return cls.assign_metadata(some_bytes, version=version)
+
+
+class StructureChecksumMixin(HeaderMetaDataMixinBase):
+
+    HEADER_LENGTH = 4
+    METADATA_TAG = 'checksum'
+    HASH_FUNCTION = 'md5'
+
+    class InvalidBytestringException(BaseException):
+        pass
+
+    def generate_checksum(self, *args, **kwargs):
+        hash = getattr(hashlib, self.HASH_FUNCTION)()
+        for mt in self.message_types:
+            message_name, message_class, message_length, kwargs = mt
+            hash.update(
+                b'\xFF\xFF\xFF\xFF' if message_length is VariableLengthBytestring
+                else message_length.to_bytes(VARIABLE_HEADER_LENGTH, "big"))
+        return hash.digest()[:StructureChecksumMixin.HEADER_LENGTH]
+
+    def validate_checksum(self, some_bytes, raise_exception=False):
+        result = self.generate_checksum() == self.get_header_bytes(some_bytes)
+        if result is False and raise_exception:
+            expected = ', '.join([f'{message_class.__name__}: ({message_length})' for message_name, message_class, message_length, kwargs in self.message_types])
+            raise StructureChecksumMixin.InvalidBytestringException(f"The contents of this bytestring could not be validated to match the expected signature which is: {expected}")
+        return result
+
+
+class VersionedBytestringSplitter(VersioningMixin, BytestringSplitter):
+    pass
+
+
+class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
+    """
+    A BytestringKwargifier which is versioned.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self._input_version = kwargs.pop('version')
+        super().__init__(*args, **kwargs)
 
 
 class VariableLengthBytestring:

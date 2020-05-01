@@ -2,7 +2,8 @@ import msgpack
 import pytest
 
 from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringKwargifier, \
-    BytestringSplittingError
+    BytestringSplittingError, VersionedBytestringSplitter, VersionedBytestringKwargifier, HeaderMetaDataMixinBase, \
+    VersioningMixin
 
 
 def test_splitting_one_message():
@@ -223,67 +224,3 @@ def test_bundle_and_dispense_variable_length():
     vbytes = bytes(VariableLengthBytestring.bundle(items))
     items_again = VariableLengthBytestring.dispense(vbytes)
     assert items == items_again
-
-"""
-Kwargifier Tests
-"""
-
-class DeliciousCoffee():
-    def __init__(self, blend, milk_type, size):
-        self.blend = blend
-        self.milk_type = milk_type
-        self.size = size
-
-    def sip(self):
-        return "Mmmm"
-
-coffee_splitter = BytestringKwargifier(
-    DeliciousCoffee,
-    blend=VariableLengthBytestring,
-    milk_type=(bytes, 13),
-    size=(int, 2, {"byteorder": "big"})
-)
-
-
-def test_kwargified_coffee():
-    coffee_as_bytes = VariableLengthBytestring(b"Equal Exchange Mind, Body, and Soul") + b"local_oatmilk" + int(54453).to_bytes(2, byteorder="big")
-
-    cup_of_coffee = coffee_splitter(coffee_as_bytes)
-    assert cup_of_coffee.blend == b"Equal Exchange Mind, Body, and Soul"
-    assert cup_of_coffee.milk_type == b"local_oatmilk"
-    assert cup_of_coffee.size == 54453
-
-
-def test_partial_instantiation():
-    coffee_as_bytes = VariableLengthBytestring(b"Sandino Roasters Blend") + b"half_and_half" + int(16).to_bytes(2, byteorder="big")
-
-    brewing_coffee = coffee_splitter(coffee_as_bytes, partial=True)
-
-    with pytest.raises(AttributeError):
-        brewing_coffee.sip()
-
-    cup_of_coffee = brewing_coffee.finish()
-    assert cup_of_coffee.sip() == "Mmmm"
-
-
-def test_just_in_time_attribute_resolution():
-    coffee_as_bytes = VariableLengthBytestring(b"Democracy Coffee") + b"half_and_half" + int(16).to_bytes(2, byteorder="big")
-
-    brewing_coffee = coffee_splitter(coffee_as_bytes, partial=True)
-    assert brewing_coffee._finished_values == {}
-
-    blend = brewing_coffee.blend
-    assert blend == b"Democracy Coffee"
-
-    assert brewing_coffee._finished_values == {'blend': b'Democracy Coffee'}
-
-    # Still can't sip, though.
-    with pytest.raises(AttributeError):
-        brewing_coffee.sip()
-
-    # Again.  This time, we'll get the cached value (though the experience to the user is the same).
-    blend = brewing_coffee.blend
-    assert blend == b"Democracy Coffee"
-
-    cup_of_coffee = brewing_coffee.finish()
-    assert cup_of_coffee.sip() == "Mmmm"
