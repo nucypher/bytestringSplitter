@@ -1,5 +1,5 @@
 from collections import namedtuple
-import hashlib
+import zlib
 from bytestring_splitter.__about__ import __author__, __summary__, __title__, __version__
 
 __all__ = ["__title__", "__summary__", "__version__", "__author__", ]
@@ -547,19 +547,20 @@ class StructureChecksumMixin(HeaderMetaDataMixinBase):
 
     HEADER_LENGTH = 4
     METADATA_TAG = 'checksum'
-    HASH_FUNCTION = 'md5'
+    HASH_FUNCTION = zlib.crc32
 
     class InvalidBytestringException(BaseException):
         pass
 
     def generate_checksum(self, *args, **kwargs):
-        hash = getattr(hashlib, self.HASH_FUNCTION)()
-        for mt in self.message_types:
-            message_name, message_class, message_length, kwargs = mt
-            hash.update(
-                b'\xFF\xFF\xFF\xFF' if message_length is VariableLengthBytestring
-                else message_length.to_bytes(VARIABLE_HEADER_LENGTH, "big"))
-        return hash.digest()[:StructureChecksumMixin.HEADER_LENGTH]
+
+        hash_input = b''.join([
+            b'\xFF\xFF\xFF\xFF' if message_length is VariableLengthBytestring
+            else message_length.to_bytes(VARIABLE_HEADER_LENGTH, "big")
+            for message_name, message_class, message_length, kwargs in self.message_types
+        ])
+        return self.HASH_FUNCTION(hash_input).to_bytes(self.HEADER_LENGTH, "big")
+
 
     def validate_checksum(self, some_bytes, raise_exception=False):
         result = self.generate_checksum() == self.get_header_bytes(some_bytes)
