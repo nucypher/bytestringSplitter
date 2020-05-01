@@ -556,7 +556,7 @@ class StructureChecksumMixin(HeaderMetaDataMixinBase):
         for mt in self.message_types:
             message_name, message_class, message_length, kwargs = mt
             hash.update(
-                b'v' if message_length is VariableLengthBytestring
+                b'\xFF\xFF\xFF\xFF' if message_length is VariableLengthBytestring
                 else message_length.to_bytes(VARIABLE_HEADER_LENGTH, "big"))
         return hash.digest()[:StructureChecksumMixin.HEADER_LENGTH]
 
