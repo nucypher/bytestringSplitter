@@ -261,6 +261,49 @@ def test_checksum_collision():
 
     assert four_variables_splitter.generate_checksum() != hd_movie_splitter.generate_checksum()
 
+def test_nested_metadata_mixin_splitters():
+    # thx dnunez
+
+    boring_normal_splitter = ChecksumVerifyingSplitter(
+        1,
+        2,
+        3,
+        4,
+    )
+
+    assert len(boring_normal_splitter) == 1 + 2 + 3 + 4
+
+    byte_output_1 = boring_normal_splitter.render(
+        b'1' + b'22' + b'333' + b'4444'
+    )
+
+    assert len(byte_output_1) == len(boring_normal_splitter) + boring_normal_splitter.HEADER_LENGTH
+
+    byte_output_a = boring_normal_splitter.render(
+        b'a' + b'bb' + b'ccc' + b'dddd'
+    )
+
+    # now lets nest two of that splitter in some other splitter
+    nested_splitter = ChecksumVerifyingSplitter(boring_normal_splitter, (bytes, 1), boring_normal_splitter)
+
+    # splitter lengths should only reflect the length of their payloads
+    assert len(nested_splitter) == len(boring_normal_splitter) + len(boring_normal_splitter) + 1
+
+    nested_bytes = nested_splitter.render(byte_output_1 + b'x' + byte_output_a)
+
+    # the rendering of the outer splitter + the two inner splitters results in a total of 3 checksum headers,
+    # being applied, which are 4 bytes each; total length should be 21 + 4 * 3
+    assert len(nested_bytes) == len(boring_normal_splitter) + len(boring_normal_splitter) + 1 + ChecksumVerifyingSplitter.HEADER_LENGTH * 3
+
+    # calling our nested_splitter should result in the original data coming back out.
+    nested_data = nested_splitter(nested_bytes)
+    assert nested_data == [[b'1', b'22', b'333', b'4444'], b'x', [b'a', b'bb', b'ccc', b'dddd']]
+
+    # i guess this... just doesn't work
+    with pytest.raises(ValueError):
+        nested_splitter(nested_bytes, single=True)
+
+
 @pytest.mark.skip()
 def test_hash_function_speed():
 

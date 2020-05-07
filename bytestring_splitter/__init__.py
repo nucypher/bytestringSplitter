@@ -87,6 +87,7 @@ def produce_value(message_class, message_name, bytes_for_this_object, kwargs):
         constructor = message_class
 
     try:
+
         message = constructor(bytes_for_this_object, **kwargs)
     except Exception as e:
         if message_name:
@@ -153,10 +154,11 @@ class BytestringSplitter:
             or raise an error if there is a remainder.
         :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
         """
+
         if not self.is_variable_length:
-            if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
+            if not (return_remainder or msgpack_remainder) and len(self) + self._total_header_length != len(splittable):
                 message = "Wrong number of bytes to constitute message types {} - need {}, got {} Did you mean to return the remainder?"
-                raise BytestringSplittingError(message.format(self.nice_message_types(), len(self), len(splittable)))
+                raise BytestringSplittingError(message.format(self.nice_message_types(), len(self) + self._total_header_length, len(splittable)))
             if len(self) is not -1 and len(self) > len(splittable):
                 message = "Not enough bytes to constitute message types {} - need {}, got {}"
                 raise BytestringSplittingError(message.format(self.nice_message_types(), len(self), len(splittable)))
@@ -181,8 +183,15 @@ class BytestringSplitter:
                     error_message = error_message.format(message_class, message_length)
                 raise BytestringSplittingError(error_message)
 
+            if issubclass(message_class.__class__, HeaderMetaDataMixinBase):
+                # the bytes we need should be extended by the length of the header for this
+                # BytestringSplitter which has metadata in its bytes representation
+                message_length += message_class.HEADER_LENGTH
+
             expected_end_of_object_bytes = cursor + message_length
             bytes_for_this_object = splittable[cursor:expected_end_of_object_bytes]
+
+
 
             if partial:
                 try:  # TODO: Make this more agnostic toward the collection type.
@@ -199,7 +208,7 @@ class BytestringSplitter:
             cursor = expected_end_of_object_bytes
 
             if single:
-                _remainder = len(splittable[cursor:])
+                _remainder = len(splittable[cursor + getattr(message_class, 'HEADER_LENGTH', 0):])
                 if _remainder:
                     raise ValueError(f"The bytes don't represent a single {message_class}; there are {_remainder} too many.")  # TODO
                 return value
@@ -228,6 +237,9 @@ class BytestringSplitter:
     def __len__(self):
         return self._length
 
+    __name__ = 'BytestringSplitter'
+
+
     def expected_bytes_length(self):
         return len(self)
 
@@ -244,19 +256,26 @@ class BytestringSplitter:
         """
 
         total_length = 0
+        total_header_length = 0
         for message_type in self.message_parameters:
             message_name, message_class, message_length, kwargs = self._parse_message_meta(message_type)
             if message_length == VariableLengthBytestring:
                 self.is_variable_length = True
             else:
                 total_length += message_length
-            if isinstance(message_class, BytestringSplitter):
+            if isinstance(message_class, HeaderMetaDataMixinBase):
+                total_header_length += message_class.HEADER_LENGTH
+
+            elif isinstance(message_class, BytestringSplitter):
                 # If the message class is itself a splitter, we obviously only want a single from it.
                 # (To use a collection instead, just add another message or use repeat().)
                 kwargs['single'] = True
+
+
             self.message_types.append((message_name, message_class, message_length, kwargs))
 
         self._length = total_length
+        self._total_header_length = total_header_length
 
     @staticmethod
     def _parse_message_meta(message_type):
@@ -384,11 +403,15 @@ class HeaderMetaDataMixinBase:
     start of said bytestring and deserialize that data at other times by removing those same bytes.
     """
 
+    def __len__(self):
+        return super().__len__()
+
     def __call__(self, splittable, *args, **kwargs):
         setattr(self, f'input_{self.METADATA_TAG}', kwargs.pop(self.METADATA_TAG, None))
         splittable = self.strip_metadata(splittable)
         splitter = super().__call__(splittable, *args, **kwargs)
         return splitter
+
 
     @classmethod
     def _get_ordered_mixins(cls, reversed=False):
@@ -467,6 +490,7 @@ class HeaderMetaDataMixinBase:
         """
         for subcls in cls._get_ordered_mixins():
             some_bytes = subcls._strip_metadata(some_bytes)
+
         return some_bytes
 
     @classmethod
