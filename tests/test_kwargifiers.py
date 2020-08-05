@@ -32,6 +32,18 @@ def test_kwargified_coffee():
     assert cup_of_coffee.size == 54453
 
 
+def test_kwargified_several_cups():
+    first_cup = VariableLengthBytestring(b"Equal Exchange Mind, Body, and Soul") + b"local_oatmilk" + int(
+        54453).to_bytes(2, byteorder="big")
+    second_cup = VariableLengthBytestring(b"Sandino Roasters Blend") + b"half_and_half" + int(16).to_bytes(2,
+                                                                                                           byteorder="big")
+    cups_as_bytes = first_cup + second_cup
+    two_cups = coffee_splitter.repeat(cups_as_bytes)
+
+    assert two_cups[0].blend == b"Equal Exchange Mind, Body, and Soul"
+    assert two_cups[1].blend == b"Sandino Roasters Blend"
+
+
 def test_partial_instantiation():
     coffee_as_bytes = VariableLengthBytestring(b"Sandino Roasters Blend") + b"half_and_half" + int(16).to_bytes(2, byteorder="big")
 

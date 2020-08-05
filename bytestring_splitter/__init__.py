@@ -19,6 +19,7 @@ class PartiallySplitBytes:
     """
     Represents a bytestring which has been split but not instantiated as processed objects yet.
     """
+
     def __init__(self, processed_objects):
         self.processed_objects = processed_objects
 
@@ -51,9 +52,9 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
 
         for message_name, (bytes_for_message, message_class, kwargs) in self.processed_objects.items():
             self._finished_values[message_name] = produce_value(message_class,
-                                                          message_name,
-                                                          bytes_for_message,
-                                                          kwargs)
+                                                                message_name,
+                                                                bytes_for_message,
+                                                                kwargs)
         return self._receiver(**self._finished_values, **self._additional_kwargs)
 
     def __getattr__(self, message_name):
@@ -66,15 +67,15 @@ class PartiallyKwargifiedBytes(PartiallySplitBytes):
         try:
             bytes_for_message, message_class, kwargs = self.processed_objects[message_name]
             self._finished_values[message_name] = produce_value(message_class,
-                                                               message_name,
-                                                               bytes_for_message,
-                                                               kwargs)
+                                                                message_name,
+                                                                bytes_for_message,
+                                                                kwargs)
             produced_value = produce_value(message_class, message_name, bytes_for_message, kwargs)
             del self.processed_objects[message_name]  # We don't do this as a pop() in case produce_value raises.
             return produced_value
         except KeyError:
-            raise AttributeError(f"{self.__class__} doesn't have a {message_name}, and it's not a partially split object either; those are {list(self.processed_objects.keys())}")
-
+            raise AttributeError(
+                f"{self.__class__} doesn't have a {message_name}, and it's not a partially split object either; those are {list(self.processed_objects.keys())}")
 
     def __bytes__(self):
         return self._original_bytes
@@ -153,6 +154,28 @@ class BytestringSplitter:
             or raise an error if there is a remainder.
         :return: Either a collection of objects of the types specified in message_types or, if single, a single object.
         """
+        processed_objects, remainder = self.actually_split(splittable, return_remainder, msgpack_remainder, partial,
+                                                           single)
+        processed_objects = self.deal_with_remainder(processed_objects, remainder, msgpack_remainder=msgpack_remainder,
+                                                     return_remainder=return_remainder)
+
+        if partial:
+            return self.partial_receiver(processed_objects)
+        return processed_objects
+
+    def deal_with_remainder(self, processed_objects, remainder, msgpack_remainder=False, return_remainder=False):
+        if msgpack_remainder:
+            try:
+                import msgpack
+            except ImportError:
+                raise RuntimeError("You need to install msgpack to use msgpack_remainder.")
+            # TODO: Again, not very agnostic re: collection type here.
+            processed_objects.append(msgpack.loads(remainder))
+        elif return_remainder:
+            processed_objects.append(remainder)
+        return processed_objects
+
+    def actually_split(self, splittable, return_remainder, msgpack_remainder, partial, single):
         if not self.is_variable_length:
             if not (return_remainder or msgpack_remainder) and len(self) != len(splittable):
                 message = "Wrong number of bytes to constitute message types {} - need {}, got {} Did you mean to return the remainder?"
@@ -201,8 +224,9 @@ class BytestringSplitter:
             if single:
                 _remainder = len(splittable[cursor:])
                 if _remainder:
-                    raise ValueError(f"The bytes don't represent a single {message_class}; there are {_remainder} too many.")  # TODO
-                return value
+                    raise ValueError(
+                        f"The bytes don't represent a single {message_class}; there are {_remainder} too many.")  # TODO
+                return value, False
             else:
                 try:  # TODO: Make this more agnostic toward the collection type.
                     processed_objects[message_name] = value
@@ -211,19 +235,7 @@ class BytestringSplitter:
 
         remainder = splittable[cursor:]
 
-        if msgpack_remainder:
-            try:
-                import msgpack
-            except ImportError:
-                raise RuntimeError("You need to install msgpack to use msgpack_remainder.")
-            # TODO: Again, not very agnostic re: collection type here.
-            processed_objects.append(msgpack.loads(remainder))
-        elif return_remainder:
-            processed_objects.append(remainder)
-
-        if partial:
-            return self.partial_receiver(processed_objects)
-        return processed_objects
+        return processed_objects, remainder
 
     def __len__(self):
         return self._length
@@ -355,27 +367,77 @@ class BytestringKwargifier(BytestringSplitter):
         self._additional_kwargs = _additional_kwargs or {}
         super().__init__(*parameter_pairs.items())
 
-    def __call__(self, splittable, receiver=None, partial=False, *args, **kwargs):
+    def __call__(self, splittable, receiver=None, partial=False, return_remainder=False, *args, **kwargs):
         receiver = receiver or self.receiver
 
         if receiver is None:
             raise TypeError(
-                "Can't fabricate without a receiver.  You can either pass one when calling or pass one when init'ing.")
+                "Can't kwargify without a receiver.  You can either pass one when calling or pass one when init'ing.")
 
-        result = super().__call__(splittable, partial=partial, *args, **kwargs)
-        if partial:
-            result.set_receiver(receiver)
-            result.set_additional_kwargs(self._additional_kwargs)
-            result.set_original_bytes_repr(splittable)
-            return result
+        container = []
+
+        while True:
+            if return_remainder:
+                result, remainder = BytestringSplitter.__call__(self, splittable, partial=partial,
+                                                               return_remainder=return_remainder, *args, **kwargs)
+            else:
+                result = BytestringSplitter.__call__(self, splittable, partial=partial,
+                                                               return_remainder=return_remainder, *args, **kwargs)
+                remainder = None
+
+            if partial:
+                result.set_receiver(receiver)
+                result.set_additional_kwargs(self._additional_kwargs)
+                result.set_original_bytes_repr(splittable)
+                container.append(result)
+            else:
+                container.append(receiver(**result, **self._additional_kwargs))
+            if not remainder:
+                break
+            else:
+                splittable = remainder
+
+        if len(container) == 1:
+            return container[0]
         else:
-            return receiver(**result, **self._additional_kwargs)
+            return container
 
     @staticmethod
     def _parse_message_meta(message_item):
         message_name, message_type = message_item
         _, message_class, message_length, kwargs = BytestringSplitter._parse_message_meta(message_type)
         return BytestringSplitter.Message(message_name, message_class, message_length, kwargs)
+
+    def deal_with_remainder(self, processed_objects, remainder, msgpack_remainder=False, return_remainder=False):
+        if remainder:
+            _processed_objects = [processed_objects]
+            if msgpack_remainder:
+                try:
+                    import msgpack
+                except ImportError:
+                    raise RuntimeError("You need to install msgpack to use msgpack_remainder.")
+                # TODO: Again, not very agnostic re: collection type here.
+                _processed_objects.append(msgpack.loads(remainder))
+            elif return_remainder:
+                _processed_objects.append(remainder)
+            else:
+                raise BytestringSplittingError("Kwargifier sees a remainder, but return_remainder is False.")
+            return _processed_objects
+        elif return_remainder:
+            return processed_objects, False
+        else:
+            return processed_objects
+
+    def repeat(self, splittable, as_set=False):
+        """
+        Continue to split the splittable until we get to the end.
+
+        If as_set, return values as a set rather than a list.
+        """
+        if as_set:
+            raise BytestringSplittingError("Don't try to kwargify with as_set - we're not going to check if your objects are hashable.")
+        messages = self(splittable, return_remainder=True)
+        return messages
 
 
 class HeaderMetaDataMixinBase:
@@ -573,6 +635,27 @@ class StructureChecksumMixin(HeaderMetaDataMixinBase):
 class VersionedBytestringSplitter(VersioningMixin, BytestringSplitter):
     pass
 
+    def repeat(self, splittable, as_set=False):
+        """
+        Continue to split the splittable until we get to the end.
+
+        If as_set, return values as a set rather than a list.
+        """
+        remainder = True
+        if as_set:
+            messages = set()
+            collector = messages.add
+        else:
+            messages = []
+            collector = messages.append
+        while remainder:
+            *message, remainder = self(splittable, return_remainder=True)
+            if len(message) == 1:
+                message = message[0]
+            collector(message)
+            splittable = remainder
+        return messages
+
 
 class VersionedBytestringKwargifier(VersionedBytestringSplitter, BytestringKwargifier):
     """
@@ -643,7 +726,8 @@ class VariableLengthBytestring:
         message_length = int.from_bytes(message_length_as_bytes, "big")
         message = bytestring[VARIABLE_HEADER_LENGTH:]
         if not message_length == len(message):
-            raise BytestringSplittingError("This does not appear to be a VariableLengthBytestring, or is not the correct length.")
+            raise BytestringSplittingError(
+                "This does not appear to be a VariableLengthBytestring, or is not the correct length.")
 
         try:
             items = BytestringSplitter(VariableLengthBytestring).repeat(message)
