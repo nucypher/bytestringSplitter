@@ -543,6 +543,11 @@ class VersioningMixin(HeaderMetaDataMixinBase):
         return cls.assign_metadata(some_bytes, version=version)
 
 
+class BrandingMixin(HeaderMetaDataMixinBase):
+    HEADER_LENGTH = 2
+    METADATA_TAG = 'brand'
+
+
 class StructureChecksumMixin(HeaderMetaDataMixinBase):
 
     HEADER_LENGTH = 4
