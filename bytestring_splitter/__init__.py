@@ -500,7 +500,7 @@ class HeaderMetaDataMixinBase:
         return data
 
     def get_header_bytes(self, some_bytes):
-        return self._get_metadata(some_bytes)[self.METADATA_TAG]
+        return self.get_metadata(some_bytes)[self.METADATA_TAG]
 
     @classmethod
     def _deserialize_metadata(cls, data_bytes):
