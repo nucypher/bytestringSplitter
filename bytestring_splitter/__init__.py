@@ -320,7 +320,11 @@ class BytestringSplitter:
         return new_splitter
 
     def nice_message_types(self):
-        return str().join("{}:{}, ".format(t[1].__name__, t[2]) for t in self.message_types)[:-2]
+        display_message_type = lambda t: t.__name__ if isinstance(t, type) else str(t)
+        return str().join("{}:{}, ".format(display_message_type(t[1]), t[2]) for t in self.message_types)[:-2]
+
+    def __str__(self):
+        return "{}({})".format(self.__class__.__name__, self.nice_message_types())
 
     def repeat(self, splittable, as_set=False):
         """
