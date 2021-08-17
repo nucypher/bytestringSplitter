@@ -222,3 +222,17 @@ def test_bundle_and_dispense_variable_length():
     vbytes = bytes(VariableLengthBytestring.bundle(items))
     items_again = VariableLengthBytestring.dispense(vbytes)
     assert items == items_again
+
+
+def test_deserialization_error_message():
+    # A regression test for a bug when a splitter with a nested splitter could not be formatted
+    # on a deserialization error, and raised a misleading error.
+
+    inner_splitter = BytestringSplitter((bytes, 4))
+    splitter = BytestringSplitter(inner_splitter, (bytes, 1))
+
+    x, y = splitter(b'12345')
+    assert x == b'1234' and y == b'5'
+
+    with pytest.raises(BytestringSplittingError):
+        splitter(b'1234')
