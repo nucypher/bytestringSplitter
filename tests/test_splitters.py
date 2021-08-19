@@ -1,7 +1,9 @@
+
 import msgpack
 import pytest
 
-from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringSplittingError
+from bytestring_splitter import BytestringSplitter, VariableLengthBytestring, BytestringSplittingError, \
+    BytestringKwargifier, VersionedBytestringKwargifier
 
 
 def test_splitting_one_message():
@@ -216,6 +218,7 @@ def test_passing_kwargs_along_with_bytes():
     result = good_splitter_twice(things_as_bytes)
 
     assert result[0].what_it_be == things_as_bytes[:35]
+
 
 def test_bundle_and_dispense_variable_length():
     items = [b'llamas', b'dingos', b'christmas-tree']
