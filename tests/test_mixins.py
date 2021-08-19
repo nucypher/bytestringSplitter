@@ -174,7 +174,7 @@ def test_checksum_validation():
         checksum=three_v_three_splitter.generate_checksum()
     )
     fivevsix = three_v_three_splitter.assign_metadata(
-        b'alice' + VariableLengthBytestring(b' recently adopted a ') + b'puppy',
+        b'alice' + VariableLengthBytestring(b' recently adopted a ') + b'puppy?',
         checksum=five_v_six_splitter.generate_checksum()
     )
 
@@ -188,7 +188,7 @@ def test_checksum_validation():
     assert threevthree_result == [b'bob', b' enjoys petting his ', b'cat']
 
     fivevsix_result = five_v_six_splitter(fivevsix)
-    assert fivevsix_result == [b'alice', b' recently adopted a ', b'puppy']
+    assert fivevsix_result == [b'alice', b' recently adopted a ', b'puppy?']
 
 
 def test_same_signatures_validate():
