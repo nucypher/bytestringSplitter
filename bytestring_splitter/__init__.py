@@ -173,7 +173,7 @@ class BytestringSplitter:
                 message_length = int.from_bytes(message_length_as_bytes, "big")
                 cursor += VARIABLE_HEADER_LENGTH
 
-            if message_length > len(splittable):
+            if message_length > len(splittable) - cursor:
                 error_message = "Can't split a message with more bytes than the original splittable.  {} claimed a length of {}"
                 if message_name:
                     error_message = error_message.format(message_name, message_length)
